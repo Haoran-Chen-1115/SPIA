@@ -1,5 +1,6 @@
 # Stochastic path-integral approach (SPIA)
 Stochastic path-integral approach for determing superconducting transition temperature Tc of anharmonic systems.
+Instructions are not complete yey.
 
 # Main program
 The main program is in the directory SPIA/main_nscf. 
