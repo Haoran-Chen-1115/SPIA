@@ -1,4 +1,4 @@
-function [QPROJ_ORI,TRANS_CORE]=...
+function [QPROJ_ORI,RES]=...
     OVERL_CORE_nscf(PSMAXN,PSPNL,NTYP,...
     LMAX,LMMAXC,RG,NMAX,...
     NPL,CH0,CH1,CH2,CH3,LPS,...
@@ -94,6 +94,18 @@ for NT=1:NTYP
         WPSi{NL}=@(x) interp1(RG{NT},WPS{NT}(:,NL).',x,'spline').*x;
     end
     
+    % Grids and spherical Bessel functions
+    xR=@(x) bsxfun(@times,reshape(G2(4,:),[],1),reshape(x,1,[]));
+    j0i=@(x) (G2(4,:)<1E-10).' + sin(xR(x))...
+        ./xR(x).*(G2(4,:)>1E-10).';
+    j1i=@(x) (sin(xR(x))./(xR(x).^2)...
+        -cos(xR(x))./xR(x))...
+        .*(G2(4,:)>1E-10).';
+    j2i=@(x) (-j0i(x)+3*j1i(x)./xR(x))...
+        .*(G2(4,:)>1E-10).';
+    j3i=@(x) (-j1i(x)+5*j2i(x)./xR(x))...
+        .*(G2(4,:)>1E-10).';
+    
     RES{NT}=zeros(NPL,LMMAXC(NT),'gpuArray');
     NCH=0;NCHM=0;
     for NL=1:LMAX(NT)
@@ -103,10 +115,6 @@ for NT=1:NTYP
             NCH=NCH+1;NCHM=NCHM+1;
             
             FAK1 = 4*pi/(2*sqrt(pi));
-            
-            xR=@(x) bsxfun(@times,reshape(G2(4,:),[],1),reshape(x,1,[]));
-            j0i=@(x) (G2(4,:)<1E-10).' + sin(xR(x))...
-                ./xR(x).*(G2(4,:)>1E-10).';
             
             j=@(x) gather(j0i(x).*Wi{NCH}(x));
             RES{NT}(:,NCHM)=FAK1*integral(j,...
@@ -118,9 +126,7 @@ for NT=1:NTYP
         elseif LCH(NL)==1
             FAK2 = 2*pi*sqrt(3/pi);
             Y1=FAK2*[G2(2,:);G2(3,:);G2(1,:)].';
-            j1i=@(x) (sin(xR(x))./(xR(x).^2)...
-                -cos(xR(x))./xR(x))...
-                .*(G2(4,:)>1E-10).';
+            
             %tic;
             %for NL=1:CH1{NT}(2)
             NCH=NCH+1;
@@ -144,9 +150,6 @@ for NT=1:NTYP
                 (3*G2(3,:).^2-1)/sqrt(3);...
                 2*G2(3,:).*G2(1,:);...
                 (G2(1,:).^2-G2(2,:).^2)].';
-            
-            j2i=@(x) (-j0i(x)+3*j1i(x)./xR(x))...
-                .*(G2(4,:)>1E-10).';
             
             %for NL=1:CH2{NT}(2)
             NCH=NCH+1;
@@ -173,9 +176,6 @@ for NT=1:NTYP
                 (G2(1,:).^2-G2(2,:).^2).*G2(3,:);...
                 (G2(1,:).^2-3*G2(2,:).^2).*G2(1,:)]).';
             
-            j3i=@(x) (-j1i(x)+5*j2i(x)./xR(x))...
-                .*(G2(4,:)>1E-10).';
-            
             %for NL=1:CH3{NT}(2)
             NCH=NCH+1;
             j=@(x) gather(j3i(x).*Wi{NCH}(x));
@@ -197,9 +197,9 @@ for NT=1:NTYP
     % QPROJ_ORI{NT}=gpuArray(QPROJ_ORI{NT});
 end
 
-TRANS_CORE=cell(1,NTYP);
-for NT=1:NTYP
-    TRANS_CORE{NT}=gather((RES{NT}*QPROJ_ORI{NT}.')/sqrt(OMEGA));
-end
+%TRANS_CORE=cell(1,NTYP);
+%for NT=1:NTYP
+%    TRANS_CORE{NT}=gather((RES{NT}*QPROJ_ORI{NT}.')/sqrt(OMEGA));
+%end
 
 end
