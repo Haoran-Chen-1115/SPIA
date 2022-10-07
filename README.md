@@ -2,11 +2,11 @@
 Stochastic path-integral approach for determing superconducting transition temperature Tc of anharmonic systems.
 The main theory can be found in the following references:
 
-[1] Theory in liquids: Huiying Liu, Ying Yuan, Donghao Liu, Xin-Zheng Li, and Junren Shi. Phys. Rev. Research 2, 013340 (2020). 
+  [1] Theory in liquids: Huiying Liu, Ying Yuan, Donghao Liu, Xin-Zheng Li, and Junren Shi. Phys. Rev. Research 2, 013340 (2020). 
 
-[2] Implementations in liquids: Haoran Chen, Xiao-Wei Zhang, Xin-Zheng Li, and Junren Shi. Phys. Rev. B 104, 184516 (2021).
+  [2] Implementations in liquids: Haoran Chen, Xiao-Wei Zhang, Xin-Zheng Li, and Junren Shi. Phys. Rev. B 104, 184516 (2021).
 
-[3] Theory and implementations in liquids: Haoran Chen, Junren Shi. arXiv:2205.07247.
+  [3] Theory and implementations in liquids: Haoran Chen, Junren Shi. arXiv:2205.07247.
 
 Instructions are not complete yey.
 
