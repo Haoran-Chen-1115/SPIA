@@ -35,5 +35,6 @@ N_sc_ex = [1 0 0; 0 1 0; 0 0 1]; % Non-diagonal supercell shape
 N_k = [6,6,6]; % of the 2*2*2 supercell, self-consistent k-mesh
 N_k_nscf = [12,12,12]; % of the 2*2*2 supercell, non-self-consistent k-mesh
 
-%% Morel-Anderson Pseudopotential
-mustar = 0.12;
+%% Eliashberg equations
+mustar = 0.12; % Morel-Anderson Pseudopotential
+ns = 2; % Gaussian smearing in unit of 0.01 Ry
