@@ -336,7 +336,7 @@ save('Result_q_re','rho_2','omega2_2','mustar','Nsigma',...
 %% Determine the transition temperature through interpolating lambda
 BETA=kB*TEMP;
 Ncut=NBEAD/2;
-ns=2;
+% ns=2; Smearing of 0.02 Ry by default
 lam_f=@(x) interp1(BETA^2*[0:NBEAD/2].^2,BETA^2*[0:NBEAD/2].^2.*lambda2{ns}(1:NBEAD/2+1),x,'pchip');
 
 rho=100;
