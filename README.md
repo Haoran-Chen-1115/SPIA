@@ -39,10 +39,20 @@ Parameters of the calculations are the descriptions can be found in 0_Public/par
 ```      
 
 * **5_New_base:** Calculates the EPC-renormalized Bloch bases using the average Green's function according to Eq. (2) of Ref. [3].
+```
+>> New_basis
+```        
 
 * **6_Tbar:** Calculates the electron-electron pair scateering amplitude according to Eqs. (1) and (5) of Ref. [3].
+```
+>> NCL=1; % Select the cluster number
+>> Tbar_ND
+```   
 
-* **7_Collect:** Solves the Bethe-Salpeter equation to calculate the effective electron-electron interactions, and solve linearized Eliashberg equations to solve Tc.
+* **7_Collect:** Solves the Bethe-Salpeter equation to calculate the effective electron-electron interactions, and solve linearized Eliashberg equations to solve Tc. The gaussian smearing for calculating EPC parameters are set to 0.02 *Ry* by default.
+```
+>> Collectq_NDsc_nscf
+```   
 
 * **8_Tools:** Contains tools to calculate mean squared displacements (MSD) and radial distribuction functions (RDF).
 
