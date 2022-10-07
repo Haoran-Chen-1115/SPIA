@@ -18,6 +18,9 @@ The program basically runs from 1_GEN_CORE to 7_Collect in steps:
 Parameters of the calculations are the descriptions can be found in 0_Public/parameter.m.
 
 * **1_GEN_CORE:** Calculate the interpolation table for Eqs. (15) and (A1) in Ref. [3]. 
+```
+GEN_CORE_s
+```
 
 * **2_GEN_BASIS:** Calculates the Bloch waves of a provided ion configuration. If L_Bloch is set to true, the basis set will be used to expand electron Green's function of different ion configurations (See Eq. (12) of Ref. [3]).
 
