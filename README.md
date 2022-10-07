@@ -27,7 +27,7 @@ Parameters of the calculations are the descriptions can be found in 0_Public/par
 >> Gen_BASIS_NDsym_nscf
 ```
 
-* **3_EFERMI:** Calculates EFERMI_av=<Ef> as an initial guess of the Fermi energy.
+* **3_EFERMI:** Calculates EFERMI_AV=\<Ef\> as an initial guess of the Fermi energy.
 ```
 >> CAC_EFERMI
 ```       
