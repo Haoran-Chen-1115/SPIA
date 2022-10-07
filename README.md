@@ -14,7 +14,7 @@ Instructions are not complete yey.
 The main program is in the directory SPIA/main_nscf. 
 The program basically runs from 1_GEN_CORE to 7_Collect in steps:
 
-* **0_Public:** contains functions that are shared by multiple steps. 
+* **0_Public:** Contains functions that are shared by multiple steps. 
 Parameters of the calculations are the descriptions can be found in 0_Public/parameter.m.
 
 * **1_GEN_CORE:** calculate the interpolation table for Eqs. (15) and (A1) in Ref. [3]. 
