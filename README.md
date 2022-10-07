@@ -14,23 +14,23 @@ Instructions are not complete yey.
 The main program is in the directory SPIA/main_nscf. 
 The program basically runs from 1_GEN_CORE to 7_Collect in steps:
 
-&nbsp;"0_Public:" contains functions that are shared by multiple steps. 
+&nbsp;**0_Public:** contains functions that are shared by multiple steps. 
 Parameters of the calculations are the descriptions can be found in 0_Public/parameter.m.
 
-&nbsp;"1_GEN_CORE:" calculate the interpolation table for Eqs. (15) and (A1) in Ref. [3]. 
+&nbsp;**1_GEN_CORE:** calculate the interpolation table for Eqs. (15) and (A1) in Ref. [3]. 
 
-&nbsp;"2_GEN_BASIS:" calculate the Bloch waves of a provided ion configuration. If L_Bloch is set to true, the basis set will be used to expand electron Green's function of different ion configurations (See Eq. (12) of Ref. [3]).
+&nbsp;**2_GEN_BASIS:** calculate the Bloch waves of a provided ion configuration. If L_Bloch is set to true, the basis set will be used to expand electron Green's function of different ion configurations (See Eq. (12) of Ref. [3]).
 
-&nbsp;"3_EFERMI:" calculate EFERMI_av=<Ef> as an initial guess of the Fermi energy.
+&nbsp;**3_EFERMI:** calculate EFERMI_av=<Ef> as an initial guess of the Fermi energy.
+        
+&nbsp;**4_Gbar:** calculate electron Green's functions of different ion configurations, and take the average. Parallelization is excuted by Gbar_ND.m.
 
-&nbsp;"4_Gbar:" calculate electron Green's functions of different ion configurations, and take the average. Parallelization is excuted by Gbar_ND.m.
+&nbsp;**5_New_base:** calculate the EPC-renormalized Bloch bases using the average Green's function according to Eq. (2) of Ref. [3].
 
-&nbsp;"5_New_base:" calculate the EPC-renormalized Bloch bases using the average Green's function according to Eq. (2) of Ref. [3].
+&nbsp;**6_Tbar:** calculate the electron-electron pair scateering amplitude according to Eqs. (1) and (5) of Ref. [3].
 
-&nbsp;"6_Tbar:" calculate the electron-electron pair scateering amplitude according to Eqs. (1) and (5) of Ref. [3].
+&nbsp;**7_Collect:** solve the Bethe-Salpeter equation to calculate the effective electron-electron interactions, and solve linearized Eliashberg equations to solve Tc.
 
-&nbsp;"7_Collect:" solve the Bethe-Salpeter equation to calculate the effective electron-electron interactions, and solve linearized Eliashberg equations to solve Tc.
-
-&nbsp;"8_Tools:" tools to calculate mean squared displacements (MSD) and radial distribuction functions (RDF).
+&nbsp;**8_Tools:** tools to calculate mean squared displacements (MSD) and radial distribuction functions (RDF).
 
 ## Interface to VASP
