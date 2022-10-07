@@ -19,14 +19,24 @@ Parameters of the calculations are the descriptions can be found in 0_Public/par
 
 * **1_GEN_CORE:** Calculate the interpolation table for Eqs. (15) and (A1) in Ref. [3]. 
 ```
-GEN_CORE_s
+>> GEN_CORE_s
 ```
 
 * **2_GEN_BASIS:** Calculates the Bloch waves of a provided ion configuration. If L_Bloch is set to true, the basis set will be used to expand electron Green's function of different ion configurations (See Eq. (12) of Ref. [3]).
+```
+>> Gen_BASIS_NDsym_nscf
+```
 
 * **3_EFERMI:** Calculates EFERMI_av=<Ef> as an initial guess of the Fermi energy.
+```
+>> CAC_EFERMI
+```       
         
 * **4_Gbar:** Calculates electron Green's functions of different ion configurations, and take the average. Parallelization is excuted by Gbar_ND.m.
+```
+>> NCL=1; % Select the cluster number
+>> Gbar_ND
+```      
 
 * **5_New_base:** Calculates the EPC-renormalized Bloch bases using the average Green's function according to Eq. (2) of Ref. [3].
 
