@@ -57,3 +57,4 @@ Parameters of the calculations are the descriptions can be found in 0_Public/par
 * **8_Tools:** Contains tools to calculate mean squared displacements (MSD) and radial distribuction functions (RDF).
 
 ## Interface to VASP
+The file outham.F contains the interface to VASP of version 5.4.4 and 6.3.2. The file output necessary intermediate variables for re-constructing Hamiltoninians and overlap matrices. Green's functions are calculated using the program in /main_nscf. There are several additional modifictations of the main program of VASP, so that outham.F can be called correctly. The corresponding difflog file will be uploaded later.
