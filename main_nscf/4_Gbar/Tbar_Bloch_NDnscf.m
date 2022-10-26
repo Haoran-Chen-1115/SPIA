@@ -60,7 +60,7 @@ end
 
 CQIJ3_fun = cell(NTYP,NTYP);
 for NT1=1:NTYP
-    for NT2=NT1:NTYP
+    for NT2=1:NTYP
         CQIJ3_fun{NT1,NT2}=cell(LMMAXC(NT1),LMMAXC(NT2));
         for i=1:LMMAXC(NT1)
             for j=1:LMMAXC(NT2)
