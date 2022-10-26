@@ -1,4 +1,4 @@
-function [QPROJ_ORI,RES]=...
+function [QPROJ_ORI,TRANS_CORE]=...
     OVERL_CORE_nscf(PSMAXN,PSPNL,NTYP,...
     LMAX,LMMAXC,RG,NMAX,...
     NPL,CH0,CH1,CH2,CH3,LPS,...
@@ -197,9 +197,9 @@ for NT=1:NTYP
     % QPROJ_ORI{NT}=gpuArray(QPROJ_ORI{NT});
 end
 
-%TRANS_CORE=cell(1,NTYP);
-%for NT=1:NTYP
-%    TRANS_CORE{NT}=gather((RES{NT}*QPROJ_ORI{NT}.')/sqrt(OMEGA));
-%end
+TRANS_CORE=cell(1,NTYP);
+for NT=1:NTYP
+    TRANS_CORE{NT}=gather((RES{NT}*QPROJ_ORI{NT}.')/sqrt(OMEGA));
+end
 
 end
