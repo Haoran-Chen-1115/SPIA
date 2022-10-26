@@ -39,7 +39,7 @@ for NT=1:NTYP
 end
 
 for NT1=1:NTYP
-    for NT2=NT1:NTYP
+    for NT2=1:NTYP
         % For now, the positions are stored in a 'direct'
         % manner
         DX=-POS_1{NT1}(1,:).'+POS_2{NT2}(1,:);
@@ -61,10 +61,10 @@ for NT1=1:NTYP
         DX=DX_2;DY=DY_2;DZ=DZ_2;
         
         DR=sqrt(DX.^2+DY.^2+DZ.^2);
-        if NT1==NT2
-            DR=triu(DR)...
-                +triu((r{NT1,NT2}(end)+1)*ones(NITYP(NT1)),1).';
-        end
+        %if NT1==NT2
+        %    DR=triu(DR)...
+        %        +triu((r{NT1,NT2}(end)+1)*ones(NITYP(NT1)),1).';
+        %end
         %                         DR(DR<1E-8)=1E-10;
         idx=find(DR<r{NT1,NT2}(end));
         idx_phase{NT1,NT2}(1,:)=mod(idx-1,NITYP(NT1))+1;
@@ -83,14 +83,14 @@ for NT1=1:NTYP
             end
         end
         
-        if NT1==NT2
-            for i=1:NP
-                R=DP(i,:);
-                Rotate=Rotate_SH(R,LMAX,LMMAXC,LPS,NT1);
-                CQIJ_DIV{NT1,NT2}(:,:,i)=...
-                    Rotate*CQIJ_interp(:,:,i)*(Rotate.');
-            end
-        else
+        %if NT1==NT2
+        %    for i=1:NP
+        %        R=DP(i,:);
+        %        Rotate=Rotate_SH(R,LMAX,LMMAXC,LPS,NT1);
+        %        CQIJ_DIV{NT1,NT2}(:,:,i)=...
+        %            Rotate*CQIJ_interp(:,:,i)*(Rotate.');
+        %    end
+        %else
             for i=1:NP
                 R=DP(i,:);
                 Rotate1=Rotate_SH(R,LMAX,LMMAXC,LPS,NT1);
@@ -98,7 +98,7 @@ for NT1=1:NTYP
                 CQIJ_DIV{NT1,NT2}(:,:,i)=...
                     Rotate1*CQIJ_interp(:,:,i)*(Rotate2.');
             end
-        end
+        %end
         
         % Different from that in the previous part,
         % the phase factor does not sum over all ions,
