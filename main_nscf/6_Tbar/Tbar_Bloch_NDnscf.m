@@ -43,7 +43,21 @@ for NT=1:NTYP
 end
 
 % Load in shifted overlap kernal
-load('CQIJ3.mat')
+load('CQIJ3.mat','CQIJ3_div','r','Nr')
+% Calculate the lower part of the kernal
+for NT1=1:NTYP
+    for NT2=1:NT1-1
+        r{NT1,NT2}=r{NT2,NT1};
+        for i=1:length(r{NT1,NT2})
+            R=[0,-r{NT1,NT2}(i),0,r{NT1,NT2}(i)];
+            Rotate1=Rotate_SH(R,LMAX,LMMAXC,LPS,NT1);
+            Rotate2=Rotate_SH(R,LMAX,LMMAXC,LPS,NT2);
+            CQIJ3_div{NT1,NT2}(:,:,i)=...
+                Rotate1*CQIJ3_div{NT2,NT1}(:,:,i).'*(Rotate2.');
+        end
+    end
+end
+
 CQIJ3_fun = cell(NTYP,NTYP);
 for NT1=1:NTYP
     for NT2=NT1:NTYP
