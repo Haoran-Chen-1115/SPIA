@@ -40,6 +40,8 @@ IBRAV = IBRAV_ORI;
 % For the algorithm above,
 % if IBRAV = IBRAV_ORI, the A_TRANS = eye(3) must have been returned.
 %A=A_new;
+
+% Shame! But the version here almost copied from VASP.
 for N9=-2:2
     for N8=-2:2
         for N7=-2:2
