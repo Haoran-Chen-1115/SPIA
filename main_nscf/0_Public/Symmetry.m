@@ -5,38 +5,79 @@ function ...
 % Determine the correct Bravais lattice type, because the specific axis is
 % already fixed in Bravais
 % Test all possible inversion and invertion
+
+% Sometimes the original axis does not provide the highest symmetry
 IBRAV_ORI = Bravais(A,inv(A));
 IBRAV = IBRAV_ORI;
-P = perms([1,2,3]);
-for NP = 1:length(P)
-    for N1 = [-1,1]
-        for N2 = [-1,1]
-            for N3 = [-1,1]
-                A_TRANS_tmp = zeros(3,3);
-                A_TRANS_tmp(P(NP,1),1) = N1;
-                A_TRANS_tmp(P(NP,2),2) = N2;
-                A_TRANS_tmp(P(NP,3),3) = N3;
-                
-                if abs(det(A_TRANS_tmp)-1)<1E-10
-                    A_prime = A * A_TRANS_tmp';
-                    B_prime = inv(A_prime);
-                    IBRAV_tmp = Bravais(A_prime,B_prime);
-                    if IBRAV_tmp >= IBRAV
-                        % A higher index means higher symmetry in this case,
-                        % because body-centered cases never mix with
-                        % face-centered or others for the same lattice system
-                        IBRAV = IBRAV_tmp;
-                        A_new = A_prime;
-                        A_TRANS = A_TRANS_tmp;
+
+% P = perms([1,2,3]);
+% for NP = 1:length(P)
+%     for N1 = [-1,1]
+%         for N2 = [-1,1]
+%             for N3 = [-1,1]
+%                 A_TRANS_tmp = zeros(3,3);
+%                 A_TRANS_tmp(P(NP,1),1) = N1;
+%                 A_TRANS_tmp(P(NP,2),2) = N2;
+%                 A_TRANS_tmp(P(NP,3),3) = N3;
+%                 
+%                 if abs(det(A_TRANS_tmp)-1)<1E-10
+%                     A_prime = A * A_TRANS_tmp';
+%                     B_prime = inv(A_prime);
+%                     IBRAV_tmp = Bravais(A_prime,B_prime);
+%                     if IBRAV_tmp >= IBRAV
+%                         % A higher index means higher symmetry in this case,
+%                         % because body-centered cases never mix with
+%                         % face-centered or others for the same lattice system
+%                         IBRAV = IBRAV_tmp;
+%                         A_new = A_prime;
+%                         A_TRANS = A_TRANS_tmp;
+%                     end
+%                 end
+%             end
+%         end
+%     end
+% end
+% For the algorithm above,
+% if IBRAV = IBRAV_ORI, the A_TRANS = eye(3) must have been returned.
+%A=A_new;
+for N9=-2:2
+    for N8=-2:2
+        for N7=-2:2
+            for N6=-2:2
+                for N5=-2:2
+                    ID1=N5*N9-N6*N8;
+                    for N4=-2:2
+                        ID2=N6*N7-N4*N9;
+                        ID3=N4*N8-N5*N7;
+                        for N3=-2:2
+                            ID4=N3*ID3;
+                            for N2=-2:2
+                                ID5=N2*ID2+ID4;
+                                for N1=-2:2
+                                    if ((N1*ID1+ID5)==1)
+                                        N=[N1,N2,N3;N4,N5,N6;N7,N8,N9];
+                                        A_prime = A*N';
+                                        B_prime = inv(A_prime);
+                                        IBRAV_tmp = Bravais(A_prime,B_prime);
+                                        if IBRAV_tmp >= IBRAV
+                                            % A higher index means higher symmetry in this case,
+                                            % because body-centered cases never mix with
+                                            % face-centered or others for the same lattice system
+                                            IBRAV = IBRAV_tmp;
+                                            A_new = A_prime;
+                                            A_TRANS = N;
+                                        end
+                                        
+                                    end
+                                end
+                            end
+                        end
                     end
                 end
             end
         end
     end
 end
-% For the algorithm above,
-% if IBRAV = IBRAV_ORI, the A_TRANS = eye(3) must have been returned.
-
 %% First the pure point group symmetry of the Bravais lattice
 % I follow the description of 
 % https://www.cryst.ehu.es/cryst/get_point_genpos.html
@@ -145,10 +186,10 @@ end
 
 N_GEN = size(BRAV_GEN,3);
 
-%% Exchange element according to the transformation matrix
-for NG = 1:N_GEN
-    BRAV_GEN(:,:,NG) = A_TRANS\BRAV_GEN(:,:,NG)/A_TRANS';
-end
+% %% Exchange element according to the transformation matrix
+% for NG = 1:N_GEN
+%     BRAV_GEN(:,:,NG) = A_TRANS\BRAV_GEN(:,:,NG)/A_TRANS';
+% end
 
 %% Now, generate all possible symmetry operations using the generators.
 % Cover every multiplication of the generators
@@ -194,6 +235,12 @@ for NG = 1:N_GEN
     N_SYM = N_SYM_tmp;
 end
 
+
+%% Corresponding operation in the original lattice
+for NS = 1:N_SYM
+    SYM_OP(:,:,NS) = A_TRANS\SYM_OP(:,:,NS)*A_TRANS;
+end
+
 %% Check whether the symmetry operation is allowed
 % for the Bravais lattice with basis
 
@@ -223,9 +270,10 @@ for NS = 2:N_SYM
     LABORT = false;
     POS_SYM = cell(1,NTYP);
     for NT = 1:NTYP
-        POS_SYM{NT} = mod(SYM_OP(:,:,NS)' * POSION{NT},1);
+        POS_SYM{NT} = mod(A_TRANS'\SYM_OP(:,:,NS)' * POSION{NT},1);
         POS_SYM{NT}(abs(POS_SYM{NT}-1)<SYM_tol) ...
-                = POS_SYM{NT}(abs(POS_SYM{NT}-1)<SYM_tol) - 1;
+            = POS_SYM{NT}(abs(POS_SYM{NT}-1)<SYM_tol) - 1;
+        POS_SYM{NT} = A_TRANS'*POS_SYM{NT};
     end
     
     % Check whether translation will take back the ions
