@@ -25,7 +25,7 @@ There are several new flags to control the outputs:
 * **NCONT:** *Integer (default=0)* The first step index will be NCONT+1, useful when performing a continuation job.
 * **NJUMP:** *Integer (default=1)* Files are written every NJUMP steps.
 
-In order to perform PIMD simulations using i-pi, you need to prepare a makefile in the working directory containing:
+In order to perform PIMD simulations using i-pi (https://github.com/i-pi/i-pi), you need to prepare a makefile in the working directory containing:
 ```
 # Makefile for the VASP example
 #
