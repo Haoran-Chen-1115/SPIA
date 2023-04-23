@@ -6,7 +6,7 @@ The main theory can be found in the following references:
 
 &emsp;**[2] Implementations in liquids:** Haoran Chen, Xiao-Wei Zhang, Xin-Zheng Li, and Junren Shi. Phys. Rev. B 104, 184516 (2021).
 
-&emsp;**[3] Theory and implementations in anharmonic solids:** Haoran Chen, Junren Shi. arXiv:2205.07247.
+&emsp;**[3] Theory and implementations in anharmonic solids:** Haoran Chen, Junren Shi. Phys. Rev. B 106, 184501 (2022).
 
 ## Interface to VASP
 The interface to VASP 5.4.4 is uploaded.
