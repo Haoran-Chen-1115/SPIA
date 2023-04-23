@@ -69,7 +69,7 @@ There are several new flags to control the outputs:
 * **LFHAM:** *Logical (default=.FALSE.)* Set to .TRUE. to enable output of intermediate variables for re-constructing Hamiltoninians.
 * **NB:** *Integer (default=1)* The bead index in PIMD simulations, will be automatically set when combining with i-pi (see below).
 * **LINDEX:** *Logical (default=.TRUE.)* Whether output some public informations in the first step (NB=1,NSTEP=1), including files: INDEX_\*, VKPT_\*, LM_INDEX_\*, SIMPI_\*, PWAV_*, WAE_*, WPS_*, PSPNL_*, PROJ_*.
-* **LKPOINTS:** *Logical (default=.FALSE.)* The beginning step index.
+* **LKPOINTS:** *Logical (default=.FALSE.)* When set to .FALSE., the program only outputs information at the Gamma point.
 * **NCONT:** *Integer (default=0)* The first step index will be NCONT+1, useful when performing a continuation job.
 * **NJUMP:** *Integer (default=1)* Files are written every NJUMP steps.
 
