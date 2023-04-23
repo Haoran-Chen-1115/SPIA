@@ -72,7 +72,7 @@ In addition, you need to prepare two more sets of files in the following directo
 * **ROOT_DIR/BEAD_1_primitive** One-step calculation using the equilibrium ion configuration in the primitive cell. It is used to calculate the equilibrium Bloch waves, and used to find the relation of k-points between the primitive Brillouin zone and supercell Brillouin zone.
 
 
-## Main program for calculating superconducting properties
+## Main program
 The main program is in the directory SPIA/main_nscf. In practice, in 
 The program basically runs from 1_GEN_CORE to 7_Collect in steps:
 
