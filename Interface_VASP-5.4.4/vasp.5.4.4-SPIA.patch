@@ -1602,7 +1602,7 @@ diff -urpN src/reader.F ../vasp.5.4.4/src/reader.F
 +      ENDIF
 +      CALL XML_INCAR('NB','I',NB,RDUM,CDUM,LDUM,CHARAC,N)
 +
-+      LINDEX=.FALSE.
++      LINDEX=.TRUE.
 +      CALL RDATAB(LOPEN,INCAR,IU5,'LINDEX','=','#',';','L', &
 +     &            IDUM,RDUM,CDUM,LINDEX,CHARAC,N,1,IERR)
 +      IF (((IERR/=0).AND.(IERR/=3)).OR. &
