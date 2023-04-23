@@ -88,7 +88,7 @@ all: job
 VASP:=vasp_gpu
 IPI:=i-pi
 
-# Example of an job on a multi-gpu machine
+# Example of an job on a 8-gpu machine
 define run_vasp
   for i in `seq 1 $1`; do \
     mkdir -p run_$$i; cp INCAR KPOINTS POTCAR POSCAR run_$$i; cd run_$$i; \
