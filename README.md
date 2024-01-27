@@ -8,12 +8,14 @@ The main theory can be found in the following references:
 
 &emsp;**[3] Theory and implementations in anharmonic solids:** Haoran Chen, Junren Shi. Phys. Rev. B 106, 184501 (2022).
 
-## Interface to VASP
-The interface to VASP 5.4.4 is uploaded.
+&emsp;**[4] Theory and implementations in superionic systems:** Haoran Chen, Junren Shi. arXiv:2305.04875.
 
-The additional subroutines output necessary intermediate variables for re-constructing Hamiltoninians and overlap matrices. Green's functions are calculated using the program in /main_nscf. The inerface to i-pi is also encoded. To apply the patch, run the following in the top level directory of VASP:
+## Interface to VASP
+The interface to VASP 5.4.4 and VASP 6.4.1 is uploaded.
+
+The additional subroutines output necessary intermediate variables for re-constructing Hamiltoninians and overlap matrices. Green's functions are calculated using the program in /main_new. The inerface to i-PI is also encoded. To apply the patch, run the following in the top level directory of VASP:
 ```
-patch -p0 < vasp.5.4.4-SPIA.patch
+patch -p0 < vasp.6.4.1-SPIA.patch
 ```
 Then you need to re-compile VASP.
 
@@ -24,6 +26,10 @@ There are several new flags to control the outputs:
 * **LKPOINTS:** *Logical (default=.FALSE.)* When set to .FALSE., the program only outputs information at the Gamma point.
 * **NCONT:** *Integer (default=0)* The first step index will be NCONT+1, useful when performing a continuation job.
 * **NJUMP:** *Integer (default=1)* Files are written every NJUMP steps.
+
+If you are using machine-learning force field (MLFF), and the following flags can be used to post-processing the trajectory in **XDATCAR_old**:
+* **LNODYN:** *Logical (default=.FALSE.)* Postions will be directly read from the file XDATCAR_old, and no molecular dynamics will be performed.
+* **NCONT:** *Integer (default=0)* Start from NCONT-th configuration stored in XDATCAR_old
 
 In order to perform PIMD simulations using i-pi (https://github.com/i-pi/i-pi), you need to prepare a makefile in the working directory containing:
 ```
