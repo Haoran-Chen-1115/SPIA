@@ -1,0 +1,1936 @@
+diff -rupN ../ori6.4.1/src/base.F src/base.F
+--- ../ori6.4.1/src/base.F	2023-04-05 13:44:10.000000000 +0800
++++ src/base.F	2024-01-26 21:06:57.818694048 +0800
+@@ -119,6 +119,19 @@
+ ! characters allways last
+         CHARACTER*40 SZNAM1          !< header of INCAR
+         CHARACTER*12 SZPREC          !< precision information
++! ---------------------------------------------------------------------
++        LOGICAL LFIXCOM, LFIX_FRAME
++! ---------------------------------------------------------------------
++! obtain the full Hamilton matrix
++        LOGICAL LFHAM
++        INTEGER NB
++        LOGICAL LINDEX
++        LOGICAL LCLOSE
++        INTEGER NCONT
++        INTEGER NJUMP
++        LOGICAL LKPOINTS
++        LOGICAL LNODYN
++! ---------------------------------------------------------------------
+       END TYPE
+ 
+       TYPE in_struct
+diff -rupN ../ori6.4.1/src/dynconstr.F src/dynconstr.F
+--- ../ori6.4.1/src/dynconstr.F	2023-04-05 13:44:10.000000000 +0800
++++ src/dynconstr.F	2024-01-26 21:06:57.506691744 +0800
+@@ -135,6 +135,8 @@
+         INTEGER :: LATTICE_DOF_GL=0
+ 
+ 
++        INTEGER :: NTYP_FIX
++        INTEGER, ALLOCATABLE :: TYPE_FIX(:)
+          
+         CONTAINS
+ 
+@@ -296,6 +298,8 @@
+         SUBROUTINE STEP_tb(DYN,T_INFO,INFO,LATT_CUR, NHC,&
+           &      EKIN,EKIN_LAT,EPS,ES,DISMAX,NDEGREES_OF_FREEDOM,IO,EPOT,g_io,WDES,SIF,ISCALE,TEIN,TIFOR)
+         !c main driver for different MD algorithms
++          USE reader_tags
++
+           TYPE(dynamics) :: DYN
+           TYPE(type_info) :: T_INFO
+           TYPE (info_struct) :: INFO
+@@ -326,6 +330,9 @@
+           INTEGER :: ios
+           REAL(q) :: HARMONIC_ENERGY
+         
++          ! -----------------------------------------
++          INTEGER :: IERR
++          ! -----------------------------------------
+ 
+           counter=counter+1
+           !CALL XML_VEL(T_INFO%NIONS,DYN%VEL)
+@@ -338,7 +345,24 @@
+             !c make sure the initialization has been done  
+             CALL DYNCONSTR_INIT(DYN,T_INFO,INFO,LATT_CUR, NHC,IO,g_io)
+             
+-            IF (MDALGO_GL==3 ) LCMASS=.FALSE.
++! ------------------------ Modified by Haoran Chen -------------------
++            IF (INFO%LFIX_FRAME) THEN
++                CALL PROCESS_INCAR(.TRUE., IO%IU0, IO%IU5, 'NTYP_FIX', NTYP_FIX, IERR, WRITEXMLINCAR)
++               IF (IERR==3) NTYP_FIX=0
++               IF (NTYP_FIX>0) THEN
++                 ALLOCATE(TYPE_FIX(NTYP_FIX))
++                 CALL PROCESS_INCAR(.TRUE., IO%IU0, IO%IU5, 'TYPE_FIX', TYPE_FIX, NTYP_FIX, IERR, WRITEXMLINCAR)
++                 IF (IERR==3) THEN 
++                     NTYP_FIX=0
++                     DEALLOCATE(TYPE_FIX)
++                 ENDIF
++               ENDIF
++
++            ENDIF
++
++            ! IF (MDALGO_GL==3 ) LCMASS=.FALSE.
++            IF (MDALGO_GL==3 .AND. .NOT.INFO%LFIXCOM ) LCMASS=.FALSE.
++! --------------------------------------------------------------------
+ 
+             !c  georg's fix 
+             IF (MDALGO_GL>0) THEN
+@@ -350,7 +374,9 @@
+ 
+             !c Langevin dynamics does not fix total momentum
+             !c hence NDEGREES_OF_FREEDOM=3*T_INFO%NIONS, not 3*T_INFO%NIONS-3
+-            IF (MDALGO_GL==3) THEN
++            !Modified by Haoran Chen
++            !IF (MDALGO_GL==3) THEN
++            IF (MDALGO_GL==3 .AND. .NOT.INFO%LFIXCOM) THEN
+               Ltxyz=1
+               DO i=1,T_INFO%NIONS
+                 DO j=1,3
+@@ -1610,6 +1636,11 @@
+           REAL(q) :: fbias_R0(iconst4),fbias_D(iconst4),fbias_A(iconst4),fbias_force(iconst4)
+           REAL(q) :: fbias_accel(3,T_INFO%NIONS),fbias_accel_L(3,3)
+           
++!--------------------------Modified by Haoran Chen------------------------
++          REAL(q) :: CMASS(3,1)
++          REAL(q) :: VEL_out(3,T_INFO%NIONS)
++          INTEGER :: N
++!-------------------------------------------------------------------------
+          
+  72     FORMAT( ' POSITION    ',35X,'REST-FORCE (eV/Angst)'/ &
+      &          ' ----------------------------------------------', &
+@@ -1675,6 +1706,15 @@
+ 
+           !c v(t)dt=v´(t)dt+f(t)/(2m)*dt^2
+           DYN%VEL=DYN%VEL+DYN%D2C+D2C_stoch
++          IF (INFO%LFIXCOM) THEN
++            ! Remove the center of mass velocity
++            CALL GIVE_CMASS(T_INFO,DYN%VEL,CMASS)
++            DO i=1,T_INFO%NIONS
++              DO j=1,3
++                IF (T_INFO%LSFOR(j,i)) DYN%VEL(j,i)=DYN%VEL(j,i)-CMASS(j,1)
++              ENDDO
++            ENDDO
++          ENDIF
+ 
+           !IF (iconst5 .GT. 0) DYN%VEL=DYN%VEL-(hills_accel+penalty_accel)
+           IF ((iconst5 .GT. 0) .OR. (iconst8 .GT. 0) .OR. (iconst4 .GT. 0)) DYN%VEL=DYN%VEL-(hills_accel+penalty_accel+hspring_accel)
+@@ -1872,6 +1912,16 @@
+ 
+           !c v'(t+dt)*dt=v(t)*dt+f(t)/(2m)*dt^2
+           DYN%VEL=DYN%VEL+DYN%D2C+D2C_momentum+D2C_stoch
++! ------------------------ Modified by Haoran Chen -------------------
++          IF (INFO%LFIXCOM) THEN
++            ! Remove the center of mass velocity
++            CALL GIVE_CMASS(T_INFO,DYN%VEL,CMASS)
++            DO i=1,T_INFO%NIONS
++              DO j=1,3
++                IF (T_INFO%LSFOR(j,i)) DYN%VEL(j,i)=DYN%VEL(j,i)-CMASS(j,1)
++              ENDDO
++            ENDDO
++          ENDIF
+ 
+           !c metydynamics or biased MD
+           !IF (iconst5 .GT. 0 ) DYN%VEL=DYN%VEL-(hills_accel+penalty_accel)
+@@ -1885,7 +1935,11 @@
+ !           ENDIF
+ 
+           !c compute position of c. of mass for the slice t:
+-          CALL GIVE_CMASS(T_INFO,DYN%POSIOC,CMASS1)
++! ------------------------ Modified by Haoran Chen -------------------
++          !CALL GIVE_CMASS(T_INFO,DYN%POSIOC,CMASS1)
++          IF (INFO%LFIX_FRAME .AND. NTYP_FIX>0) THEN
++              CALL GIVE_CMASS_FRAME(T_INFO,DYN%POSIOC,CMASS1,NTYP_FIX,TYPE_FIX)
++          ENDIF
+ 
+           !c r(t+dt)=r(t)+v'(t+dt)*dt
+           DYN%POSION=DYN%POSIOC+DYN%VEL
+@@ -1965,8 +2019,18 @@
+ 
+           !!c compute position of c. of mass for the slice t+dt:
+           !CALL GIVE_CMASS(T_INFO,DYN%POSION,CMASS2)
++          IF (INFO%LFIX_FRAME .AND. NTYP_FIX>0) THEN
++              CALL GIVE_CMASS_FRAME(T_INFO,DYN%POSION,CMASS2,NTYP_FIX,TYPE_FIX)
++          ENDIF
+ 
+           !remove shift of c. of mass:
++          IF (INFO%LFIX_FRAME .AND. NTYP_FIX>0) THEN
++           DO i=1,T_INFO%NIONS
++             DO j=1,3
++               IF (T_INFO%LSFOR(j,i)) DYN%POSION(j,i)=DYN%POSION(j,i)-(CMASS2(j,1)-CMASS1(j,1))
++             ENDDO
++           ENDDO
++          ENDIF
+ !           DO i=1,T_INFO%NIONS
+ !             DO j=1,3
+ !               IF (T_INFO%LSFOR(j,i)) DYN%POSION(j,i)=DYN%POSION(j,i)-(CMASS2(j)-CMASS1(j))
+diff -rupN ../ori6.4.1/src/electron.F src/electron.F
+--- ../ori6.4.1/src/electron.F	2023-04-05 13:44:11.000000000 +0800
++++ src/electron.F	2024-01-26 21:06:57.818694048 +0800
+@@ -668,6 +668,26 @@
+           INFO%LOVERL,LMDIM,CQIJ, LDIMP, LDIMP,LMDIMP,INNER_STEP, IO%LORBIT, PAR, &
+           EFERMI, KPOINTS%EMIN, KPOINTS%EMAX)
+       ENDIF
++
++! ---------------------------------- FHAM --------------------------------
++! ========================================================================
++! If the end of the electronic loop is reached
++! calculate the full hamiltonian matrix (i.e. FHAM)
++! if required
++! ========================================================================
++
++      IF (INFO%LABORT .AND. INFO%LFHAM) THEN
++          IF (LABORT_WITHOUT_CONV) THEN
++              WRITE(6,*) 'not converged, full hamiltonian not calculated'
++          ELSE
++              CALL OUT_HAM(GRID, NONL_S, P, WDES, LATT_CUR, T_INFO, INFO, SV,&
++                        LMDIM, CDIJ, CQIJ,HAMILTONIAN ,EFERMI, TOTEN,NSTEP,DYN)
++          ENDIF
++      ENDIF
++
++! ------------------------------------------------------------------------
++
++
+ ! ======================================================================
+ ! If the end of the electronic loop is reached
+ ! calculate accurate initial state core level shifts
+diff -rupN ../ori6.4.1/src/fsockets.f90 src/fsockets.f90
+--- ../ori6.4.1/src/fsockets.f90	1970-01-01 08:00:00.000000000 +0800
++++ src/fsockets.f90	2024-01-26 21:06:57.818694048 +0800
+@@ -0,0 +1,202 @@
++!F90 ISO_C_BINGING wrapper for socket communication.
++
++!Copyright (C) 2013, Michele Ceriotti
++
++!Permission is hereby granted, free of charge, to any person obtaining
++!a copy of this software and associated documentation files (the
++!"Software"), to deal in the Software without restriction, including
++!without limitation the rights to use, copy, modify, merge, publish,
++!distribute, sublicense, and/or sell copies of the Software, and to
++!permit persons to whom the Software is furnished to do so, subject to
++!the following conditions:
++
++!The above copyright notice and this permission notice shall be included
++!in all copies or substantial portions of the Software.
++
++!THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
++!EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
++!MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
++!IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
++!CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
++!TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
++!SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
++
++
++!Contains both the functions that transmit data to the socket and read the data
++!back out again once finished, and the function which opens the socket initially.
++
++!Functions:
++!   open_socket: Opens a socket with the required host server, socket type and
++!      port number.
++!   write_buffer: Writes a string to the socket.
++!   read_buffer: Reads data from the socket.
++
++   MODULE F90SOCKETS
++   USE ISO_C_BINDING
++   
++   IMPLICIT NONE
++
++  INTERFACE writebuffer
++      MODULE PROCEDURE writebuffer_s, &
++                       writebuffer_d, writebuffer_dv, &
++                       writebuffer_i
++                       
++  END INTERFACE 
++
++  INTERFACE readbuffer
++      MODULE PROCEDURE readbuffer_s, &
++                       readbuffer_dv, readbuffer_d, &
++                       readbuffer_i
++                       
++  END INTERFACE 
++
++  INTERFACE
++    SUBROUTINE open_csocket(psockfd, inet, port, host) BIND(C, name="open_socket")
++      USE ISO_C_BINDING
++    INTEGER(KIND=C_INT)                      :: psockfd, inet, port
++    CHARACTER(KIND=C_CHAR), DIMENSION(*)     :: host
++
++    END SUBROUTINE open_csocket
++
++    
++    SUBROUTINE writebuffer_csocket(psockfd, pdata, plen) BIND(C, name="writebuffer")
++      USE ISO_C_BINDING
++    INTEGER(KIND=C_INT)                      :: psockfd
++    TYPE(C_PTR), VALUE                       :: pdata
++    INTEGER(KIND=C_INT)                      :: plen
++
++    END SUBROUTINE writebuffer_csocket       
++
++    SUBROUTINE readbuffer_csocket(psockfd, pdata, plen) BIND(C, name="readbuffer")
++      USE ISO_C_BINDING
++    INTEGER(KIND=C_INT)                      :: psockfd
++    TYPE(C_PTR), VALUE                       :: pdata
++    INTEGER(KIND=C_INT)                      :: plen
++
++    END SUBROUTINE readbuffer_csocket   
++  END INTERFACE
++
++   CONTAINS
++   
++   SUBROUTINE open_socket(psockfd, inet, port, host)      
++      IMPLICIT NONE
++      INTEGER, INTENT(IN) :: inet, port
++      INTEGER, INTENT(OUT) :: psockfd
++      CHARACTER(LEN=1024), INTENT(IN) :: host
++      CHARACTER(LEN=1,KIND=C_CHAR) :: chost(1024)
++
++      CALL fstr2cstr(host, chost)
++      CALL open_csocket(psockfd, inet, port, host)
++   END SUBROUTINE
++
++   SUBROUTINE fstr2cstr(fstr, cstr, plen)
++      IMPLICIT NONE
++      CHARACTER(LEN=*), INTENT(IN) :: fstr
++      CHARACTER(LEN=1,KIND=C_CHAR), INTENT(OUT) :: cstr(:)
++      INTEGER, INTENT(IN), OPTIONAL :: plen
++      
++      INTEGER i,n
++      IF (PRESENT(plen)) THEN
++         n = plen
++         DO i=1,n
++            cstr(i) = fstr(i:i)
++         ENDDO
++      ELSE
++         n = LEN_TRIM(fstr)
++         DO i=1,n
++            cstr(i) = fstr(i:i)
++         ENDDO
++         cstr(n+1) = C_NULL_CHAR
++      END IF
++   END SUBROUTINE
++
++  SUBROUTINE writebuffer_d (psockfd, fdata)
++      USE ISO_C_BINDING
++    INTEGER, INTENT(IN)                      :: psockfd
++    REAL(KIND=8), INTENT(IN)                :: fdata
++
++    REAL(KIND=C_DOUBLE), TARGET              :: cdata
++
++      cdata = fdata
++      CALL writebuffer_csocket(psockfd, c_loc(cdata), 8)
++  END SUBROUTINE
++
++  SUBROUTINE writebuffer_i (psockfd, fdata)
++      USE ISO_C_BINDING
++    INTEGER, INTENT(IN)                      :: psockfd, fdata
++
++    INTEGER(KIND=C_INT), TARGET              :: cdata
++
++      cdata = fdata
++      CALL writebuffer_csocket(psockfd, c_loc(cdata), 4)
++  END SUBROUTINE
++
++  SUBROUTINE writebuffer_s (psockfd, fstring, plen)
++      USE ISO_C_BINDING
++    INTEGER, INTENT(IN)                      :: psockfd
++    CHARACTER(LEN=*), INTENT(IN)             :: fstring
++    INTEGER, INTENT(IN)                      :: plen
++
++    INTEGER                                  :: i
++    CHARACTER(LEN=1, KIND=C_CHAR), TARGET    :: cstring(plen)
++
++      DO i = 1,plen
++         cstring(i) = fstring(i:i)
++      ENDDO
++      CALL writebuffer_csocket(psockfd, c_loc(cstring(1)), plen)
++  END SUBROUTINE
++
++  SUBROUTINE writebuffer_dv(psockfd, fdata, plen)
++      USE ISO_C_BINDING  
++    INTEGER, INTENT(IN)                      :: psockfd, plen
++    REAL(KIND=8), INTENT(IN), TARGET        :: fdata(plen)
++
++      CALL writebuffer_csocket(psockfd, c_loc(fdata(1)), 8*plen)
++  END SUBROUTINE
++
++  SUBROUTINE readbuffer_d (psockfd, fdata)
++      USE ISO_C_BINDING
++    INTEGER, INTENT(IN)                      :: psockfd
++    REAL(KIND=8), INTENT(OUT)               :: fdata
++
++    REAL(KIND=C_DOUBLE), TARGET              :: cdata
++
++      CALL readbuffer_csocket(psockfd, c_loc(cdata), 8)
++      fdata=cdata
++  END SUBROUTINE
++
++  SUBROUTINE readbuffer_i (psockfd, fdata)
++      USE ISO_C_BINDING
++    INTEGER, INTENT(IN)                      :: psockfd
++    INTEGER, INTENT(OUT)                     :: fdata
++
++    INTEGER(KIND=C_INT), TARGET              :: cdata
++
++      CALL readbuffer_csocket(psockfd, c_loc(cdata), 4)
++      fdata = cdata
++  END SUBROUTINE
++
++  SUBROUTINE readbuffer_s (psockfd, fstring, plen)
++      USE ISO_C_BINDING
++    INTEGER, INTENT(IN)                      :: psockfd
++    CHARACTER(LEN=*), INTENT(OUT)            :: fstring
++    INTEGER, INTENT(IN)                      :: plen
++
++    INTEGER                                  :: i
++    CHARACTER(LEN=1, KIND=C_CHAR), TARGET    :: cstring(plen)
++
++      CALL readbuffer_csocket(psockfd, c_loc(cstring(1)), plen)
++      fstring=""   
++      DO i = 1,plen
++         fstring(i:i) = cstring(i)
++      ENDDO
++  END SUBROUTINE
++
++  SUBROUTINE readbuffer_dv(psockfd, fdata, plen)
++      USE ISO_C_BINDING  
++    INTEGER, INTENT(IN)                      :: psockfd, plen
++    REAL(KIND=8), INTENT(OUT), TARGET       :: fdata(plen)
++
++      CALL readbuffer_csocket(psockfd, c_loc(fdata(1)), 8*plen)
++  END SUBROUTINE
++  END MODULE
+diff -rupN ../ori6.4.1/src/main.F src/main.F
+--- ../ori6.4.1/src/main.F	2023-04-05 13:44:11.000000000 +0800
++++ src/main.F	2024-01-26 21:06:57.830694137 +0800
+@@ -154,6 +154,8 @@
+       USE chi_GG
+       USE time_propagation
+ #endif
++! ipi socket module
++      USE F90SOCKETS, ONLY : open_socket, writebuffer, readbuffer
+ ! Thomas Bucko's code contributions
+       USE random_seeded
+ #ifdef tbdyn
+@@ -297,6 +299,9 @@
+        LOGICAL :: LATTICE_CONSTRAINTS_GL(3)=(/.TRUE.,.TRUE.,.TRUE./)
+ #endif
+ 
++      ! Haoran Chen: for reading XDATCAR_old
++      INTEGER :: NHEAD
++
+       INTEGER :: NGX,NGY,NGZ,NGXC,NGYC,NGZC
+       INTEGER :: NRPLWV,LDIM,LMDIM,LDIM2,LMYDIM
+       INTEGER :: IRMAX,IRDMAX,ISPIND
+@@ -305,6 +310,23 @@
+       LOGICAL :: LNBANDS=.TRUE.
+       INTEGER :: TIU6, TIU0
+       !INTEGER :: MDALGO=0           ! dublicates MDALGO in tbdyn
++      
++      ! ipi socket variables
++      INTEGER, PARAMETER :: MSGLEN=12 ! length of headers of driver/wrapper commun. protocol
++      INTEGER :: SOCKET, PORT       ! socket ID, port
++      INTEGER :: INET               ! socket mode: 0 = unix, 1 = inet
++      CHARACTER(LEN=1024) :: IHOST  ! address of the server
++      CHARACTER(LEN=12) :: HEADER   ! socket communication buffers
++      INTEGER :: IMSG               ! 1 status, 2 posdata, 3 getforce, 4 other
++      LOGICAL :: HASDATA
++      ! ipi variables for the system
++      INTEGER :: NAT
++      REAL(q) :: IPIPOT
++      REAL(q), ALLOCATABLE :: IPIATOMS(:), IPIFORCES(:)
++      REAL(q) :: CELL_H(9), CELL_IH(9), VIRIAL(9)
++      ! unit conversion
++      REAL(q) :: EVTOHA, FOCTOAU
++
+ !=======================================================================
+ !  begin array dimensions ...
+ !=======================================================================
+@@ -449,6 +471,11 @@
+       TOTEN = 0.0_q
+       TSIF = 0.0_q
+ 
++      ! ipi initialize variables
++      EVTOHA = 1_q/(2_q*RYTOEV)
++      FOCTOAU = AUTOA*EVTOHA
++      HASDATA = .FALSE.
++
+ #ifdef libbeef
+       LBEEFCALCBASIS = .FALSE.
+ #endif
+@@ -678,7 +705,11 @@
+           WDES%LSPIRAL,WDES%LZEROZ,WDES%QSPIRAL,WDES%LORBITALREAL, &
+           INFO%LASPH,INFO%TURBO,INFO%IRESTART,INFO%NREBOOT,INFO%NMIN,INFO%EREF, &
+           INFO%NLSPLINE,FFTW_PLAN_EFFORT, &
+-          IO%LH5, IO%LWAVEH5, IO%LCHARGH5, IO%VELOCITY &
++          IO%LH5, IO%LWAVEH5, IO%LCHARGH5, IO%VELOCITY, &
++          INFO%LFIXCOM, INFO%LFIX_FRAME, &
++          INFO%LFHAM,&
++          INFO%NB,INFO%LINDEX,INFO%LCLOSE,INFO%NCONT,INFO%LKPOINTS,INFO%NJUMP,INFO%LNODYN &
++         ,IHOST,PORT,INET &
+ #ifdef libbeef
+          ,LBEEFENS,LBEEFBAS &
+ #endif
+@@ -895,6 +926,25 @@
+      &           NIOND,NIONPD, NTYPD,NTYPPD, &
+      &           IO%IU0,IO%IU6)
+ 
++      IF (DYN%IBRION==0 .AND. INFO%LNODYN) THEN
++          OPEN(UNIT=890,FILE='XDATCAR_old',STATUS='OLD')
++          IF (INFO%NCONT>0) THEN
++            NHEAD = 8+(INFO%NCONT-1)*(T_INFO%NIONS+1)
++          ELSE
++            NHEAD = 7
++            WRITE(*,*) 'LNODYN=.TRUE. and NCONT=0, the first configuration from POSCAR'
++          ENDIF
++      
++          DO i=1,NHEAD
++              READ(890,*)
++          ENDDO
++      
++          IF (INFO%NCONT>0) THEN
++            DO NI=1,T_INFO%NIONS
++              READ(890,*) DYN%POSION(1,NI),DYN%POSION(2,NI),DYN%POSION(3,NI)
++            ENDDO
++          ENDIF
++      ENDIF
+ !-----------------------------------------------------------------------
+ ! diverse INCAR readers
+ !-----------------------------------------------------------------------
+@@ -979,6 +1029,94 @@
+             &format, and do not appear multiple times in the file.")
+ 
+ !-----------------------------------------------------------------------
++! ipi open socket
++!-----------------------------------------------------------------------
++#ifdef MPI
++      IF (DYN%IBRION==23) THEN
++        IF (COMM%NODE_ME == 1) THEN
++          WRITE(TIU0,*) " DRIVER - Connecting to host ", TRIM(IHOST)
++          IF (INET > 0) THEN
++            WRITE(TIU0,*) " on port ", PORT, " using an internet socket."
++          ELSE
++            WRITE(TIU0,*) " using UNIX socket."
++          ENDIF
++          CALL open_socket(SOCKET, INET, PORT, TRIM(IHOST))
++          WRITE(TIU0,*) "VASP ipi driver (written by Wei Fang) successfully starting"
++        ENDIF
++        ! get initial geometries from ipi
++      driver_init: DO
++        ! do communication on master node only
++        IF (COMM%NODE_ME == 1) THEN
++          CALL readbuffer(SOCKET, HEADER, MSGLEN)
++          IF (TRIM(HEADER) == "STATUS") THEN
++            IMSG=1
++          ELSE IF (TRIM(HEADER) == "POSDATA") THEN
++            IMSG=2
++          ELSE
++            IMSG=4
++          ENDIF
++        ENDIF
++        CALL M_bcast_i(COMM,IMSG,1)
++        IF (COMM%NODE_ME == 1) WRITE(TIU0,*) " @ DRIVER MODE: Message from server: ", TRIM(HEADER)
++        IF (IMSG == 1) THEN
++          IF (COMM%NODE_ME == 1) THEN  ! does not need init
++            CALL writebuffer(SOCKET, "READY       ", MSGLEN)
++          ENDIF
++        ELSE IF (IMSG == 2) THEN
++          ! receives the positions & the cell data
++          IF (COMM%NODE_ME == 1) THEN    ! first the cell and the number of atoms
++            CALL readbuffer(SOCKET, CELL_H, 9)
++            CALL readbuffer(SOCKET, CELL_IH, 9)
++            CALL readbuffer(SOCKET, NAT)
++          ENDIF
++          ! broadcast to all nodes
++          CALL M_bcast_d(COMM,CELL_H,9)
++          CALL M_bcast_d(COMM,CELL_IH,9)
++          CALL M_bcast_i(COMM,NAT,1)
++          ! convert to vasp LATT_CUR%A & %B format & units conversion
++          DO NI=1,3
++            LATT_CUR%A(NI,1) = CELL_H(NI*3-2)*AUTOA
++            LATT_CUR%A(NI,2) = CELL_H(NI*3-1)*AUTOA
++            LATT_CUR%A(NI,3) = CELL_H(NI*3)*AUTOA
++          ENDDO
++          DO NI=1,3
++            LATT_CUR%B(NI,1) = CELL_IH(NI*3-2)/AUTOA
++            LATT_CUR%B(NI,2) = CELL_IH(NI*3-1)/AUTOA
++            LATT_CUR%B(NI,3) = CELL_IH(NI*3)/AUTOA
++          ENDDO
++          CALL LATTIC(LATT_CUR)
++ 2333     FORMAT(' @DRIVER MODE: Received direct lattice vectors',17X,'reciprocal lattice vectors'/ &
++       &   3(2(3X,3F13.9)/) /)
++          IF (COMM%NODE_ME == 1) THEN
++            WRITE(TIU0,*) " @ DRIVER MODE: Received initial lattice "
++            WRITE(TIU6,2333) ((LATT_CUR%A(I,J),I=1,3),(LATT_CUR%B(I,J),I=1,3),J=1,3)
++          ENDIF
++          ! then we can allocate the buffer for the positions, and receive them
++          ALLOCATE(IPIATOMS(3*NAT))
++          ALLOCATE(IPIFORCES(3*NAT))
++          IF (COMM%NODE_ME == 1) CALL readbuffer(SOCKET, IPIATOMS, NAT*3)
++          CALL M_bcast_d(COMM,IPIATOMS,NAT*3) ! and broadcast them to all nodes
++          ! convert to vasp DYN%POSION format & units conversion
++          DO NI=1,NAT
++            DYN%POSION(1,NI) = IPIATOMS(NI*3-2)*AUTOA
++            DYN%POSION(2,NI) = IPIATOMS(NI*3-1)*AUTOA
++            DYN%POSION(3,NI) = IPIATOMS(NI*3)*AUTOA
++          ENDDO
++          CALL KARDIR(NAT,DYN%POSION,LATT_CUR%B)
++          CALL TOPRIM(NAT,DYN%POSION)
++          DYN%POSIOC=DYN%POSION
++          IF (COMM%NODE_ME == 1) WRITE(TIU0,*) " @ DRIVER MODE: Received initial positions "
++          EXIT driver_init
++        ELSE
++          INFO%LSTOP=.TRUE.
++          IF (COMM%NODE_ME == 1) WRITE(TIU0,*) "EXIT driver or unknow msg received"
++          EXIT driver_init
++        ENDIF
++      ENDDO driver_init
++      ENDIF
++#endif
++
++!-----------------------------------------------------------------------
+ #ifdef _OPENACC
+       CALL ACC_INIT_CUBLAS()
+       CALL ACC_INIT_CUSOLVER()
+@@ -3676,7 +3814,7 @@ io_end
+       ENDIF
+ 
+       IF (DYN%IBRION==-1 .OR. DYN%IBRION==5 .OR. DYN%IBRION==6 .OR. &
+-           DYN%IBRION==7.OR.DYN%IBRION==8) THEN
++           DYN%IBRION==7.OR.DYN%IBRION==8 .OR. DYN%IBRION==23) THEN
+          IF(LDO_AB_INITIO) THEN
+             EENTROPY=E%EENTROPY*SCALEE
+          ELSE
+@@ -3730,6 +3868,7 @@ io_end
+ !=======================================================================
+ ibrion: IF (DYN%IBRION==0) THEN
+ 
++    IF (.NOT. INFO%LNODYN) THEN
+         FACT=(DYN%POTIM**2)*EVTOJ/AMTOKG *1E-10_q
+         NI=1
+         DO NT=1,T_INFO%NTYP
+@@ -3801,6 +3940,24 @@ ibrion: IF (DYN%IBRION==0) THEN
+ #endif
+         CALL STOP_TIMING("G",TIU6,'IONSTEP')
+ 
++    ELSE ! LNODYN
++        DYN%POSIOC = DYN%POSION
++        NHEAD = (INFO%NJUMP-1)*(T_INFO%NIONS+1)+1
++        DO i=1,NHEAD
++            READ(890,*)
++        ENDDO
++
++        DO NI=1,T_INFO%NIONS
++            READ(890,*) DYN%POSION(1,NI),DYN%POSION(2,NI),DYN%POSION(3,NI)
++        ENDDO
++        
++        CALL put_in_box_help(T_INFO%NIONS,DYN%POSION)
++        EKIN = 0._q
++        EKIN_LAT = 0._q
++        ES = 0._q
++        EPS = 0._q
++    ENDIF ! LNODYN
++
+ ! sum energy of images along chain
+         CALLMPI_C( sum_chain( TOTEN ))
+         CALLMPI_C( sum_chain( EKIN ))
+@@ -3900,6 +4057,112 @@ ibrion: IF (DYN%IBRION==0) THEN
+ 
+ !=======================================================================
+ ! DYN%IBRION =
++! 23  driver mode for ipi
++!=======================================================================
++#ifdef MPI
++      ELSE IF (DYN%IBRION==23) THEN
++        DYN%POSIOC=DYN%POSION
++        HASDATA=.TRUE.
++
++      driver_loop: DO
++        ! do communication on master node only
++        IF (COMM%NODE_ME == 1) THEN
++          CALL readbuffer(SOCKET, HEADER, MSGLEN)
++          IF (TRIM(HEADER) == "STATUS") THEN
++            IMSG=1
++          ELSE IF (TRIM(HEADER) == "POSDATA") THEN
++            IMSG=2
++          ELSE IF (TRIM(HEADER) == "GETFORCE") THEN
++            IMSG=3
++          ELSE
++            IMSG=4
++          ENDIF
++        ENDIF
++        CALL M_bcast_i(COMM,IMSG,1)
++        IF (COMM%NODE_ME == 1) WRITE(TIU0,*) " @ DRIVER MODE: Message from server: ", TRIM(HEADER)
++        IF (IMSG == 1) THEN
++          IF (COMM%NODE_ME == 1) THEN
++            IF (HASDATA) THEN
++              CALL writebuffer(SOCKET,"HAVEDATA    ",MSGLEN)
++            ELSE
++              CALL writebuffer(SOCKET,"READY       ",MSGLEN)
++            ENDIF
++          ENDIF
++        ELSE IF (IMSG == 2) THEN
++          ! receives cell data
++          IF (COMM%NODE_ME == 1) THEN
++            CALL readbuffer(SOCKET, CELL_H, 9)
++            CALL readbuffer(SOCKET, CELL_IH, 9)
++            CALL readbuffer(SOCKET, NAT)
++          ENDIF
++          ! broadcast to all nodes
++          CALL M_bcast_d(COMM,CELL_H,9)
++          CALL M_bcast_d(COMM,CELL_IH,9)
++          CALL M_bcast_i(COMM,NAT,1)
++          ! convert to vasp LATT_CUR%A & %B format & units conversion
++          DO NI=1,3
++            LATT_CUR%A(NI,1) = CELL_H(NI*3-2)*AUTOA
++            LATT_CUR%A(NI,2) = CELL_H(NI*3-1)*AUTOA
++            LATT_CUR%A(NI,3) = CELL_H(NI*3)*AUTOA
++          ENDDO
++          DO NI=1,3
++            LATT_CUR%B(NI,1) = CELL_IH(NI*3-2)/AUTOA
++            LATT_CUR%B(NI,2) = CELL_IH(NI*3-1)/AUTOA
++            LATT_CUR%B(NI,3) = CELL_IH(NI*3)/AUTOA
++          ENDDO
++          CALL LATTIC(LATT_CUR)
++          IF (COMM%NODE_ME == 1) THEN
++            WRITE(TIU0,*) " @ DRIVER MODE: Received lattice"
++            WRITE(TIU6,2333) ((LATT_CUR%A(I,J),I=1,3),(LATT_CUR%B(I,J),I=1,3),J=1,3)
++          ENDIF
++          ! receives positions
++          IF (COMM%NODE_ME == 1) CALL readbuffer(SOCKET, IPIATOMS, NAT*3)
++          CALL M_bcast_d(COMM,IPIATOMS,NAT*3) ! and broadcast them to all nodes
++          ! convert to vasp DYN%POSION format & units conversion
++          DO NI=1,NAT
++            DYN%POSION(1,NI) = IPIATOMS(NI*3-2)*AUTOA
++            DYN%POSION(2,NI) = IPIATOMS(NI*3-1)*AUTOA
++            DYN%POSION(3,NI) = IPIATOMS(NI*3)*AUTOA
++          ENDDO
++          CALL KARDIR(NAT,DYN%POSION,LATT_CUR%B)
++          CALL TOPRIM(NAT,DYN%POSION)
++          IF (COMM%NODE_ME == 1) write(TIU0,*) " @ DRIVER MODE: Received positions "
++          ! move on to the next DO ion
++          EXIT driver_loop
++        ELSE IF (IMSG == 3) THEN
++          ! communicates energy info back to i-pi
++          IF (COMM%NODE_ME == 1) THEN
++            WRITE(TIU0,*) " @ DRIVER MODE: Returning v,forces,stress "
++            IPIPOT = (TOTEN-E%EENTROPY/(2+NORDER))*EVTOHA
++            DO NI=1,NAT
++              IPIFORCES(NI*3-2) = TIFOR(1,NI)*FOCTOAU
++              IPIFORCES(NI*3-1) = TIFOR(2,NI)*FOCTOAU
++              IPIFORCES(NI*3) = TIFOR(3,NI)*FOCTOAU
++            ENDDO
++            DO NI=1,3
++              VIRIAL(NI*3-2) = TSIF(1,NI)*EVTOHA
++              VIRIAL(NI*3-1) = TSIF(2,NI)*EVTOHA
++              VIRIAL(NI*3) = TSIF(3,NI)*EVTOHA
++            ENDDO
++            CALL writebuffer(SOCKET,"FORCEREADY  ",MSGLEN)
++            CALL writebuffer(SOCKET,IPIPOT)
++            CALL writebuffer(SOCKET,NAT)
++            CALL writebuffer(SOCKET,IPIFORCES,3*NAT)
++            CALL writebuffer(SOCKET,VIRIAL,9)
++            ! i-pi can also receive an arbitrary string, we just send back zero characters.
++            CALL writebuffer(SOCKET,0)
++          ENDIF
++          HASDATA=.FALSE.
++        ELSE
++          INFO%LSTOP=.TRUE.
++          IF (COMM%NODE_ME == 1) WRITE(TIU0,*) "EXIT driver or unknow msg received"
++          EXIT driver_loop
++        ENDIF
++      ENDDO driver_loop
++#endif
++
++!=======================================================================
++! DYN%IBRION =
+ ! 1  quasi-Newton algorithm
+ ! 2  conjugate gradient
+ ! 3  quickmin
+@@ -4873,6 +5136,10 @@ io_end
+          ENDIF
+       ENDIF
+ 
++
++      IF (DYN%IBRION==0 .AND. INFO%LNODYN) &
++        & NSTEP = NSTEP + INFO%NJUMP-1
++
+       ENDDO ion
+ !!      PROFILING_STOP('ion_loop_main')
+ !=======================================================================
+diff -rupN ../ori6.4.1/src/makefile src/makefile
+--- ../ori6.4.1/src/makefile	2023-04-05 13:44:10.000000000 +0800
++++ src/makefile	2024-01-26 21:06:57.830694137 +0800
+@@ -112,7 +112,9 @@ endif
+ 
+ OBJCTS=$(filter %.o, $(OBJS) $(FFT3D))
+ #OBJCTS_f90=$(filter-out getshmem.o, $(OBJCTS))
+-F90SRC=$(OBJCTS:.o=$(SUFFIX))
++F90SRC_tmp=$(OBJCTS:.o=$(SUFFIX))
++F90SRC=$(filter-out sockets.f90, $(F90SRC_tmp)) 
++F90SRC+=sockets.c 
+ F90SRC+=main.f90
+ 
+ ifdef MODS
+@@ -134,7 +136,7 @@ vasp: $(OBJS) $(FFT3D) $(INC) main.o
+ objects: sources $(LIB) $(OBJS) $(FFT3D) $(INC) main.o
+ 
+ sources:
+-	rsync -u $(SRCDIR)/*.F $(SRCDIR)/*.inc .
++	rsync -u $(SRCDIR)/*.F $(SRCDIR)/*.inc $(SRCDIR)/*.f90 $(SRCDIR)/*.c .
+ 	$(MAKE) build_info
+ #	-rsync -u $(SRCDIR)/*.f .
+ 
+@@ -255,3 +257,6 @@ main.o : main$(SUFFIX)
+ 
+ fft3dlib_f77.o: fft3dlib_f77$(SUFFIX)
+ 	$(F77) $(FFLAGS_F77) -c $*$(SUFFIX)
++
++sockets.o: sockets.c
++	$(CC_LIB) -c sockets.c
+diff -rupN ../ori6.4.1/src/ml_ff_ff2.F src/ml_ff_ff2.F
+--- ../ori6.4.1/src/ml_ff_ff2.F	2023-04-05 13:44:10.000000000 +0800
++++ src/ml_ff_ff2.F	2024-01-26 21:06:57.818694048 +0800
+@@ -565,11 +565,11 @@
+              IF (ALLOCATED(SOAP_C001)) DEALLOCATE(SOAP_C001)
+              IF (ALLOCATED(SOAP_C002)) DEALLOCATE(SOAP_C002)
+              IF (FF%ISTART.EQ.2) THEN
+-                IF (FF%NSTEP.GE.FF%NSW) THEN
+-                   DO_DEALLOCATE = .TRUE.
+-                ELSE
++                !IF (FF%NSTEP.GE.FF%NSW) THEN
++                !   DO_DEALLOCATE = .TRUE.
++                !ELSE
+                    DO_DEALLOCATE = .FALSE.
+-                ENDIF
++                !ENDIF
+              ELSE
+                 DO_DEALLOCATE = .TRUE.
+              ENDIF
+diff -rupN ../ori6.4.1/src/ml_ff_neighbor.F src/ml_ff_neighbor.F
+--- ../ori6.4.1/src/ml_ff_neighbor.F	2023-04-05 13:44:11.000000000 +0800
++++ src/ml_ff_neighbor.F	2024-01-26 21:06:57.806693959 +0800
+@@ -921,6 +921,7 @@ module neighbor_cell_list_mod
+       PROFILING_STOP( "UPDATE_BOX_LIST" )
+ 
+       this%max_neighbors = 1
++      this%algo_type = 2
+       ! select different algorithms
+       this%max_neighbor = 0
+       select case ( this%algo_type )
+diff -rupN ../ori6.4.1/src/mymath.F src/mymath.F
+--- ../ori6.4.1/src/mymath.F	2023-04-05 13:44:10.000000000 +0800
++++ src/mymath.F	2024-01-26 21:06:57.830694137 +0800
+@@ -1513,6 +1513,63 @@
+           ENDDO
+         END SUBROUTINE GIVE_CMASS
+ 
++! ---------------------------Modified by Haoran Chen----------------------
++        SUBROUTINE GIVE_CMASS_FRAME(T_INFO,X,CMASS,NTYP_FIX,TYPE_FIX)
++          USE base
++          USE lattice
++          TYPE(type_info) :: T_INFO
++          REAL(q) :: X(3,T_INFO%NIONS),X_(3,T_INFO%NIONS)
++          REAL(q) :: CMASS(3,1)
++          REAL(q) :: MASS
++          REAL(q) :: TOTALMASS
++          INTEGER :: NTYP_FIX
++          INTEGER :: NIS,NT,NT_F, NI
++          INTEGER :: TYPE_FIX(NTYP_FIX)
++          LOGICAL :: LFIX
++          INTEGER :: Ltxyz(3)
++          INTEGER :: i,j
++
++          !c are there any fixed atoms?
++          Ltxyz=1
++          DO i=1,T_INFO%NIONS
++            DO j=1,3
++              IF (.NOT. T_INFO%LSFOR(j,i) .AND. Ltxyz(j)==1) Ltxyz(j)=0
++            ENDDO
++          ENDDO
++
++          TOTALMASS=0._q
++          MASS=0._q
++          X_=0._q
++          
++          NIS=0
++          DO NT=1,T_INFO%NTYP
++            LFIX=.FALSE.
++            DO NT_F=1,NTYP_FIX
++                LFIX=(NT==TYPE_FIX(NT_F)) .OR. LFIX
++            ENDDO
++            IF (LFIX) THEN
++              !WRITE(*,*) 'FIX_FRAME:', NT
++              DO NI=NIS+1,NIS+T_INFO%NITYP(NT)
++                MASS=(T_INFO%POMASS(T_INFO%ITYP(NI)))
++                TOTALMASS=TOTALMASS+MASS
++                DO j=1,3
++                  X_(j,NI)=X(j,NI)*MASS
++                ENDDO
++              ENDDO
++            ENDIF
++            NIS=NIS+T_INFO%NITYP(NT)
++          ENDDO
++
++          !WRITE(*,*) 'X_:',X_
++          !WRITE(*,*) 'Ltxyz:',Ltxyz
++          !WRITE(*,*) 'Totalmass:',TOTALMASS
++          DO i=1,3
++            CMASS(i,:)=SUM(X_(i,:))*Ltxyz(i)/TOTALMASS
++          ENDDO
++        END SUBROUTINE GIVE_CMASS_FRAME
++!-------------------------------------------------------------------------
++
++
+         SUBROUTINE put_in_box(NIONS,X)
+           REAL(q) :: X(3,NIONS)
+           INTEGER :: NIONS
+@@ -1533,6 +1590,26 @@
+           ENDDO
+         END SUBROUTINE put_in_box
+ 
++        SUBROUTINE put_in_box_help(NIONS,X)
++          REAL(q) :: X(3,NIONS)
++          INTEGER :: NIONS
++          INTEGER :: i,j
++
++          DO i=1,3
++            DO j=1,NIONS
++              DO
++                IF (X(i,j) .GE. 1._q) THEN
++                  X(i,j)=X(i,j)-1._q
++                ELSE IF (X(i,j) .LT. 0._q) THEN
++                  X(i,j)=X(i,j)+1._q
++                ELSE
++                  EXIT
++                ENDIF
++              ENDDO
++            ENDDO
++          ENDDO
++        END SUBROUTINE put_in_box_help
++
+         SUBROUTINE minimize_difference(X,Y,NIONS)
+           REAL(q) :: X(3,NIONS)
+           REAL(q) :: Y(3,NIONS)
+diff -rupN ../ori6.4.1/src/.objects src/.objects
+--- ../ori6.4.1/src/.objects	2023-04-05 13:44:10.000000000 +0800
++++ src/.objects	2024-01-26 21:06:57.818694048 +0800
+@@ -2,6 +2,8 @@ SOURCE=\
+ 	c2f_interface.o \
+ 	nccl2for.o \
+ 	simd.o \
++        sockets.o \
++        fsockets.o \
+ 	base.o \
+ 	profiling.o \
+ 	string.o \
+@@ -255,7 +257,8 @@ SOURCE=\
+ 	core_con_mat.o \
+ 	embed.o \
+ 	extpot.o \
+-        rpa_high.o
++        rpa_high.o \
++        outham.o
+ 
+ SOURCE_O1 = \
+ 	cl_shift.o \
+diff -rupN ../ori6.4.1/src/outham.F src/outham.F
+--- ../ori6.4.1/src/outham.F	1970-01-01 08:00:00.000000000 +0800
++++ src/outham.F	2024-01-26 21:06:57.830694137 +0800
+@@ -0,0 +1,704 @@
++#include "symbol.inc"
++
++  SUBROUTINE OUT_HAM(GRID, NONL_S_ORI, PP, WDES, LATT_CUR, T_INFO, INFO, SV, &
++                LMDIM, CDIJ, CQIJ, HAMILTONIAN, EFERMI, TOTEN, NSTEP_ori,DYN)
++    USE prec
++    USE mgrid
++    USE nonl
++    USE pseudo
++    USE wave
++    USE lattice
++    USE base
++    USE poscar
++    USE mpimy
++    USE fock
++    USE mymath
++    USE hamil_struct_def
++    USE radial
++
++    IMPLICIT NONE
++    ! input
++    TYPE (grid_3d) :: GRID
++    TYPE (nonl_struct) :: NONL_S_ORI
++    TYPE (potcar) :: PP(NONL_S_ORI%NTYP)
++    TYPE (wavedes) :: WDES
++    TYPE (latt) :: LATT_CUR
++    TYPE (type_info) :: T_INFO
++    TYPE (info_struct) :: INFO
++    RGRID :: SV(DIMREAL(GRID%MPLWV),WDES%NCDIJ)
++    INTEGER :: LMDIM
++    OVERLAP CDIJ(LMDIM,LMDIM,WDES%NIONS,WDES%NCDIJ)
++    OVERLAP CQIJ(LMDIM,LMDIM,WDES%NIONS,WDES%NCDIJ)
++    REAL(q) :: EFERMI
++    REAL(q) :: TOTEN
++
++    ! extra check
++    LOGICAL, EXTERNAL :: USEFOCK_CONTRIBUTION
++    TYPE (ham_handle) :: HAMILTONIAN
++
++    ! local
++    TYPE (nonl_struct) :: NONL_S
++    INTEGER :: ISP, NK, NT, LMMAXC, NIS,CH
++    INTEGER :: NPLWV, NPLMAX, NPL
++#ifdef debug
++    INTEGER, ALLOCATABLE :: G_INDEX(:,:),G_INDEX_LOC(:,:)
++#endif
++    INTEGER :: NP, NNP, ISPINOR
++    COMPLEX(q), ALLOCATABLE :: FHAM(:,:),CWORK(:)
++    REAL(q),ALLOCATABLE :: WAE_PS(:,:),WAE(:,:),WPS(:,:)
++
++    ! io
++    INTEGER :: IUHAM, i, j,CH0,CH1,CH2,CH3, i_in1, i_in2
++    CHARACTER(5) :: NKINDEX,NISP,NTINDEX,NB_C,INB_INDEX
++    CHARACTER(40) :: FORM
++
++    ! time
++    INTEGER :: t1,t2,t_max
++    REAL(q) :: t_rate
++    
++    ! molecular dynamics
++    TYPE (dynamics)    DYN
++    INTEGER :: NSTEP_ori, NSTEP
++    CHARACTER(10) :: NSTEP_C
++    CHARACTER(40) :: MK_DIR
++    CHARACTER(200) :: MV
++    INTEGER :: NKPTS
++    
++    LOGICAL :: LINDEX    
++
++    LINDEX = INFO%LINDEX
++
++    ! Hybrid functional not supported
++    ! meta-GGA not supported
++    IF (USEFOCK_CONTRIBUTION()) THEN
++        WRITE(*,*) 'Hybrid functional not supported, quit'
++        CALL M_exit(); stop
++    ENDIF
++
++    IF (ASSOCIATED(HAMILTONIAN%MU)) THEN
++        WRITE(*,*) 'meta-GGA not supported, quit'
++        CALL M_exit(); stop
++    ENDIF
++
++    IF (WDES%LSPIRAL) THEN
++        WRITE(*,*) 'spinor not supported, quit'
++        CALL M_exit(); stop
++    ENDIF
++
++    ! make a copy for non_local structure
++    !NONL_S=NONL_S_ORI
++    !IF (INFO%LREAL) THEN
++        ! if projector function was calculated in real space
++        ! turn to reciprocal space now
++    PUSH_ACC_EXEC_ON(.FALSE.)
++        CALL NONL_ALLOC(NONL_S, T_INFO, PP, WDES, .FALSE.)
++        CALL SPHER(GRID, NONL_S, PP, WDES, LATT_CUR,  1)
++        CALL PHASE(WDES,NONL_S,0)
++    !ENDIF
++
++    WRITE(NB_C,'(g0)') INFO%NB
++
++    NPLWV=GRID%NGX*GRID%NGY*GRID%NGZ
++    NPLMAX=maxval(WDES%NGVECTOR)
++
++    NSTEP=NSTEP_ori+INFO%NCONT
++    IF (MOD(NSTEP_ori+INFO%NCONT-1,INFO%NJUMP).EQ.0) THEN
++
++    IF (DYN%IBRION==0 .OR. DYN%IBRION==23) THEN
++        WRITE(NSTEP_C,'(g0)') NSTEP
++        MK_DIR='mkdir ./BEAD_'//TRIM(NSTEP_C)//' 1>/dev/null 2>&1'
++        CALL system( MK_DIR )
++    ENDIF
++
++    IF (MOD(0,WDES%COMM_KIN%NCPU) .NE. (WDES%COMM_KIN%NODE_ME-1)) THEN
++        GOTO 202
++    ENDIF
++
++    CALL system_clock(t1,t_rate,t_max)
++    IF (INFO%NB>1 .OR. NSTEP>1) LINDEX=.FALSE.
++
++    IF (INFO%LKPOINTS) THEN
++        NKPTS = WDES%NKPTS
++    ELSE
++        NKPTS = 1
++    ENDIF
++
++
++      IF (MOD(0,WDES%COMM_KINTER%NCPU) .EQ. (WDES%COMM_KINTER%NODE_ME-1)) THEN
++          IF (LINDEX) THEN
++          IUHAM=540
++          OPEN(IUHAM,FILE='./VKPT',&
++                  STATUS='REPLACE',FORM='UNFORMATTED',ACCESS='DIRECT',RECL=8)
++          DO NK=1,WDES%NKPTS
++            DO i=1,3
++              WRITE(IUHAM,REC=3*(NK-1)+i) WDES%VKPT(i,NK)
++            ENDDO
++          ENDDO
++          CLOSE(IUHAM)
++          ENDIF
++
++          IUHAM=540
++          OPEN(IUHAM,FILE='HEAD_'//TRIM(NB_C),&
++                  STATUS='REPLACE',FORM='UNFORMATTED',ACCESS='DIRECT',RECL=8)
++          DO i=1,3
++          DO j=1,3
++            WRITE(IUHAM,REC=j+3*(i-1)) LATT_CUR%A(j,i)
++          ENDDO
++          ENDDO
++          WRITE(IUHAM,REC=10) EFERMI
++          WRITE(IUHAM,REC=11) TOTEN
++          CLOSE(IUHAM)
++          OPEN(IUHAM,FILE='HEAD_'//TRIM(NB_C),&
++                  STATUS='UNKNOWN',FORM='UNFORMATTED',ACCESS='DIRECT',RECL=4)
++          WRITE(IUHAM,REC=23) WDES%NKPTS
++          WRITE(IUHAM,REC=24) WDES%NCDIJ
++          WRITE(IUHAM,REC=25) NONL_S%NTYP
++          DO i=1,NONL_S%NTYP
++            WRITE(IUHAM,REC=25+i) NONL_S%NITYP(i)
++          ENDDO
++          WRITE(IUHAM,REC=26+NONL_S%NTYP) WDES%COMM_INB%NCPU
++          CLOSE(IUHAM)
++          OPEN(IUHAM,FILE='ELECT_'//TRIM(NB_C),&
++                  STATUS='REPLACE',FORM='UNFORMATTED',ACCESS='DIRECT',RECL=8)
++          DO i=1,NONL_S%NTYP
++            WRITE(IUHAM,REC=i) PP(i)%ZVALF
++          ENDDO
++          DO i=1,NONL_S%NTYP
++            WRITE(IUHAM,REC=NONL_S%NTYP+i) PP(i)%POMASS
++          ENDDO
++          CLOSE(IUHAM)
++ 
++          IF (DYN%IBRION==0 .OR. DYN%IBRION==23) THEN
++              MV='mv ./HEAD_'//TRIM(NB_C)//' ./BEAD_'//TRIM(NSTEP_C)//' 1>/dev/null 2>&1'
++              CALL system(MV)
++
++              MV='mv ./ELECT_'//TRIM(NB_C)//' ./BEAD_'//TRIM(NSTEP_C)//' 1>/dev/null 2>&1'
++              CALL system(MV)
++
++              MV='mv ./VKPT ./BEAD_'//TRIM(NSTEP_C)//' 1>/dev/null 2>&1'
++              CALL system(MV)
++          ENDIF
++      ENDIF
++ 
++      ! index for calculated G-grids in the whole grid
++#ifdef debug
++      IF (LINDEX) THEN
++        ALLOCATE(G_INDEX(NPLMAX,WDES%NKPTS),G_INDEX_LOC(NPLWV,WDES%NKPTS))
++        CALL GEN_G_INDEX(G_INDEX,G_INDEX_LOC,NPLWV,NPLMAX,WDES,GRID)
++      ENDIF
++#endif
++ 
++      IF (MOD(0,WDES%COMM_KINTER%NCPU) .EQ. (WDES%COMM_KINTER%NODE_ME-1)) THEN
++          NIS=1
++          typ2:DO NT=1,NONL_S%NTYP
++            LMMAXC=NONL_S%LMMAX(NT)
++  
++            IF (LMMAXC.NE.0) THEN
++              WRITE(NTINDEX,'(g0)') NT
++              ! take a lot of space, write position instead.
++              ! phase
++              IUHAM=540
++              OPEN(IUHAM,FILE='POS_'//TRIM(NB_C)//'_'//TRIM(NTINDEX),&
++                      STATUS='REPLACE',FORM='UNFORMATTED',ACCESS='DIRECT',&
++                      RECL=24*NONL_S%NITYP(NT))
++  
++              WRITE(IUHAM,REC=1) NONL_S%POSION(1:3,NIS:NIS+NONL_S%NITYP(NT)-1)
++  
++              CLOSE(IUHAM)
++  
++              ! information needed for transformation opertor T
++              ! radial grids and simpson coefficient
++              IF (LINDEX) THEN
++                  ! INDEX for lm 
++                  OPEN(IUHAM,FILE='LM_INDEX_'//TRIM(NB_C)//'_'//TRIM(NTINDEX),&
++                          STATUS='REPLACE',FORM='UNFORMATTED',ACCESS='DIRECT',&
++                          RECL=4*PP(NT)%LMAX)
++                  WRITE(IUHAM,Rec=1) PP(NT)%LPS(1:PP(NT)%LMAX)
++         
++                  CLOSE(IUHAM)
++
++                  CALL SET_SIMP(PP(NT)%R)
++                  OPEN(IUHAM,FILE='SIMPI_'//TRIM(NB_C)//'_'//TRIM(NTINDEX),&
++                          STATUS='REPLACE',FORM='UNFORMATTED',ACCESS='DIRECT',&
++                          RECL=8)
++                  WRITE(IUHAM,REC=1) PP(NT)%R%NMAX,NT
++               
++                  DO i=1,PP(NT)%R%NMAX
++                    WRITE(IUHAM,REC=i+1) PP(NT)%R%R(i)
++                  ENDDO
++               
++                  DO i=1,PP(NT)%R%NMAX
++                    WRITE(IUHAM,REC=i+PP(NT)%R%NMAX+1) PP(NT)%R%SI(i)
++                  ENDDO
++               
++                  CLOSE(IUHAM)
++               
++                  ALLOCATE(WAE_PS(PP(NT)%R%NMAX,PP(NT)%LMAX))
++                  DO CH=1,PP(NT)%LMAX
++                    WAE_PS(1:PP(NT)%R%NMAX,CH)=PP(NT)%R%R(1:PP(NT)%R%NMAX)*&
++                            (PP(NT)%WAE(1:PP(NT)%R%NMAX,CH)-&
++                            PP(NT)%WPS(1:PP(NT)%R%NMAX,CH))
++                  ENDDO
++               
++                  OPEN(IUHAM,FILE='PWAV_'//TRIM(NB_C)//'_'//TRIM(NTINDEX),&
++                          STATUS='REPLACE',FORM='UNFORMATTED',ACCESS='DIRECT',&
++                          RECL=8*PP(NT)%LMAX*PP(NT)%R%NMAX)
++                  WRITE(IUHAM,REC=1) WAE_PS
++                  CLOSE(IUHAM)
++                  DEALLOCATE(WAE_PS)
++               
++                  ALLOCATE(WAE(PP(NT)%R%NMAX,PP(NT)%LMAX))
++                  DO CH=1,PP(NT)%LMAX
++                    WAE(1:PP(NT)%R%NMAX,CH)=&
++                            PP(NT)%WAE(1:PP(NT)%R%NMAX,CH)
++                  ENDDO
++               
++                  OPEN(IUHAM+1,FILE='WAE_'//TRIM(NB_C)//'_'//TRIM(NTINDEX),&
++                          STATUS='REPLACE',FORM='UNFORMATTED',ACCESS='DIRECT',&
++                          RECL=8*PP(NT)%LMAX*PP(NT)%R%NMAX)
++                  WRITE(IUHAM+1,REC=1) WAE
++                  CLOSE(IUHAM+1)
++                  DEALLOCATE(WAE)
++  
++                  ALLOCATE(WPS(PP(NT)%R%NMAX,PP(NT)%LMAX))
++                  DO CH=1,PP(NT)%LMAX
++                    WPS(1:PP(NT)%R%NMAX,CH)=&
++                            PP(NT)%WPS(1:PP(NT)%R%NMAX,CH)
++                  ENDDO
++               
++                  OPEN(IUHAM+2,FILE='WPS_'//TRIM(NB_C)//'_'//TRIM(NTINDEX),&
++                          STATUS='REPLACE',FORM='UNFORMATTED',ACCESS='DIRECT',&
++                          RECL=8*PP(NT)%LMAX*PP(NT)%R%NMAX)
++                  WRITE(IUHAM+2,REC=1) WPS
++                  CLOSE(IUHAM+2)
++                  DEALLOCATE(WPS)
++               
++                  ! Projector for interpolation 
++                  OPEN(IUHAM+3,FILE='PSPNL_'//TRIM(NB_C)//'_'//TRIM(NTINDEX),&
++                          STATUS='REPLACE',FORM='UNFORMATTED',ACCESS='DIRECT',&
++                          RECL=8)
++                  WRITE(IUHAM+3,REC=1) PP(NT)%PSMAXN
++                  DO CH=1,PP(NT)%LDIM
++                    DO i=1,NPSNL+1
++                      WRITE(IUHAM+3,REC=i+(CH-1)*(NPSNL+1)+1) PP(NT)%PSPNL(i-1,CH)
++                    ENDDO
++                  ENDDO
++                  CLOSE(IUHAM+3)
++              ENDIF
++  
++            ENDIF
++            NIS=NIS+NONL_S%NITYP(NT)
++          ENDDO typ2
++ 
++          IF (DYN%IBRION==0 .OR. DYN%IBRION==23) THEN
++              MV='mv ./POS_'//TRIM(NB_C)//'_* ./SIMPI_'//TRIM(NB_C)//'_* ./PWAV_'//TRIM(NB_C)//'_* ./WAE_'//TRIM(NB_C)//'_* ./WPS_'//TRIM(NB_C)//'_* ./BEAD_'//TRIM(NSTEP_C)//' 1>/dev/null 2>&1'
++              CALL system(MV)
++
++              MV='mv ./LM_INDEX_'//TRIM(NB_C)//'_* PSPNL_'//TRIM(NB_C)//'_* ./BEAD_'//TRIM(NSTEP_C)//' 1>/dev/null 2>&1'
++              CALL system(MV)
++          ENDIF
++      ENDIF
++ 
++ 
++      WRITE(INB_INDEX,'(g0)') WDES%COMM_INB%NODE_ME
++      spin: DO ISP=1,WDES%NCDIJ
++ 
++        IUHAM=540
++        WRITE(NISP,'(g0)') ISP
++        ! information needed for local potential and kinetic energy
++        IF (MOD(0,WDES%COMM_KINTER%NCPU) .EQ. (WDES%COMM_KINTER%NODE_ME-1)) THEN
++          IF (WDES%COMM_INB%NCPU.NE.1) THEN
++#ifdef realmode
++              OPEN(IUHAM,FILE='SV_'//TRIM(NB_C)//'_'//TRIM(NISP)//'_'//TRIM(INB_INDEX),&
++                      STATUS='REPLACE',FORM='UNFORMATTED',ACCESS='DIRECT',RECL=8*GRID%RL%NP)
++#else
++              OPEN(IUHAM,FILE='SV_'//TRIM(NB_C)//'_'//TRIM(NISP)//'_'//TRIM(INB_INDEX),&
++                      STATUS='REPLACE',FORM='UNFORMATTED',ACCESS='DIRECT',RECL=16*GRID%RL%NP)
++#endif
++          ELSE
++#ifdef realmode
++              OPEN(IUHAM,FILE='SV_'//TRIM(NB_C)//'_'//TRIM(NISP),&
++                      STATUS='REPLACE',FORM='UNFORMATTED',ACCESS='DIRECT',RECL=8*GRID%RL%NP)
++#else
++              OPEN(IUHAM,FILE='SV_'//TRIM(NB_C)//'_'//TRIM(NISP),&
++                      STATUS='REPLACE',FORM='UNFORMATTED',ACCESS='DIRECT',RECL=16*GRID%RL%NP)
++#endif
++          ENDIF
++          WRITE(IUHAM,REC=1) SV(1:GRID%RL%NP,ISP)
++          CLOSE(IUHAM)
++
++          NIS=1;i_in1=1;i_in2=1
++          typ1: DO NT=1,NONL_S%NTYP
++          LMMAXC=NONL_S%LMMAX(NT)
++     
++            IF (LMMAXC.NE.0) THEN
++              WRITE(NTINDEX,'(g0)') NT
++              ! nonlocal pseudopotential strength
++              IF (WDES%COMM_INB%NCPU.NE.1) THEN
++#ifdef realmode
++                  OPEN(IUHAM,FILE='./CDIJ_'//TRIM(NB_C)//'_'//&
++                          TRIM(NISP)//'_'//TRIM(NTINDEX)//'_'//TRIM(INB_INDEX),&
++                          STATUS='REPLACE',FORM='UNFORMATTED',ACCESS='DIRECT',&
++                          RECL=8*LMMAXC)
++#else
++                  OPEN(IUHAM,FILE='./CDIJ_'//TRIM(NB_C)//'_'//&
++                          TRIM(NISP)//'_'//TRIM(NTINDEX)//'_'//TRIM(INB_INDEX),&
++                          STATUS='REPLACE',FORM='UNFORMATTED',ACCESS='DIRECT',&
++                          RECL=16*LMMAXC)
++#endif
++              ELSE
++#ifdef realmode
++                  OPEN(IUHAM,FILE='./CDIJ_'//TRIM(NB_C)//'_'//&
++                          TRIM(NISP)//'_'//TRIM(NTINDEX),&
++                          STATUS='REPLACE',FORM='UNFORMATTED',ACCESS='DIRECT',&
++                          RECL=8*LMMAXC)
++#else
++                  OPEN(IUHAM,FILE='./CDIJ_'//TRIM(NB_C)//'_'//&
++                          TRIM(NISP)//'_'//TRIM(NTINDEX),&
++                          STATUS='REPLACE',FORM='UNFORMATTED',ACCESS='DIRECT',&
++                          RECL=16*LMMAXC)
++#endif
++              ENDIF
++              ! DO i=1,NONL_S%NITYP(NT)
++              DO i=NIS,NIS+NONL_S%NITYP(NT)-1
++                IF (NI_LOCAL(i,WDES%COMM_INB) /=0 ) THEN
++                  DO j=1,LMMAXC
++                    WRITE(IUHAM,Rec=(i-NIS)*LMMAXC+j) CDIJ(1:LMMAXC,j,i_in1,ISP)
++                  ENDDO
++                  i_in1=i_in1+1
++                ENDIF
++              ENDDO
++     
++              CLOSE(IUHAM)
++     
++              ! overlap strength
++              IF (WDES%COMM_INB%NCPU.NE.1) THEN
++#ifdef realmode
++                  OPEN(IUHAM,FILE='./CQIJ_'//TRIM(NB_C)//'_'//&
++                          TRIM(NISP)//'_'//TRIM(NTINDEX)//'_'//TRIM(INB_INDEX),&
++                          STATUS='REPLACE',FORM='UNFORMATTED',ACCESS='DIRECT',&
++                          RECL=8*LMMAXC)
++#else
++                  OPEN(IUHAM,FILE='./CQIJ_'//TRIM(NB_C)//'_'//&
++                          TRIM(NISP)//'_'//TRIM(NTINDEX)//'_'//TRIM(INB_INDEX),&
++                          STATUS='REPLACE',FORM='UNFORMATTED',ACCESS='DIRECT',&
++                          RECL=16*LMMAXC)
++#endif
++              ELSE
++#ifdef realmode
++                  OPEN(IUHAM,FILE='./CQIJ_'//TRIM(NB_C)//'_'//&
++                          TRIM(NISP)//'_'//TRIM(NTINDEX),&
++                          STATUS='REPLACE',FORM='UNFORMATTED',ACCESS='DIRECT',&
++                          RECL=8*LMMAXC)
++#else
++                  OPEN(IUHAM,FILE='./CQIJ_'//TRIM(NB_C)//'_'//&
++                          TRIM(NISP)//'_'//TRIM(NTINDEX),&
++                          STATUS='REPLACE',FORM='UNFORMATTED',ACCESS='DIRECT',&
++                          RECL=16*LMMAXC)
++#endif
++              ENDIF
++              ! DO i=1,NONL_S%NITYP(NT)
++              DO i=NIS,NIS+NONL_S%NITYP(NT)-1
++                IF (NI_LOCAL(i,WDES%COMM_INB) /=0 ) THEN
++                  DO j=1,LMMAXC
++                    WRITE(IUHAM,Rec=(i-NIS)*LMMAXC+j) CQIJ(1:LMMAXC,j,i_in2,ISP)
++                  ENDDO
++                  i_in2=i_in2+1
++                ENDIF
++              ENDDO
++     
++              CLOSE(IUHAM)
++              NIS=NIS+NONL_S%NITYP(NT)
++            ENDIF
++          ENDDO typ1
++        ENDIF
++ 
++        kpoint: DO NK=1,NKPTS
++          ! used to allocate kpoints to different nodes
++          IF (MOD(NK-1,WDES%COMM_KINTER%NCPU) .NE. (WDES%COMM_KINTER%NODE_ME-1)) &
++                  CYCLE kpoint
++        ! kpoint: DO NK=1,1
++
++          CALL PHASE(WDES,NONL_S,NK)
++          NPL=WDES%NGVECTOR(NK)
++
++          ! io information
++          IUHAM=540
++          WRITE(NKINDEX,'(g0)') NK
++
++#ifdef debug
++          ! used for checking
++          ALLOCATE(FHAM(NPL,NPL),CWORK(NPL*WDES%NRSPINORS))
++          DO NP=1, NPL
++              CALL CAC_FHAM_LOCAL(SV(1,ISP),CWORK,NP,GRID,NPL,NK,&
++                      WDES%NINDPW(1,NK),WDES,G_INDEX_LOC(1,NK))
++              DO NNP=1, NPL
++              DO ISPINOR=0,WDES%NRSPINORS-1
++                  FHAM(NNP,NP)=FHAM(NNP,NP)+CWORK(NNP+NPL*ISPINOR)
++              ENDDO
++              ENDDO
++          ENDDO
++ 
++          OPEN(IUHAM,FILE='LOC_'//TRIM(NB_C)//'_'//TRIM(NKINDEX)//'_'//TRIM(NISP),&
++                  STATUS='REPLACE',FORM='UNFORMATTED',ACCESS='DIRECT',RECL=16*NPL*NPL)
++          WRITE(IUHAM,REC=1) FHAM
++          CLOSE(IUHAM)
++          DEALLOCATE(FHAM,CWORK)
++#endif
++
++          ! Since it's the same for all configuartions, only output once
++          IF (LINDEX) THEN
++              ! index for calculated G-grids in the whole grid
++#ifndef debug
++           IF (NK.EQ.1 .AND. ISP.EQ.1) THEN
++#endif
++              OPEN(IUHAM,FILE='INDEX_'//TRIM(NB_C)//'_'//TRIM(NKINDEX)//'_'//TRIM(NISP),&
++                      STATUS='REPLACE',FORM='UNFORMATTED',ACCESS='DIRECT',RECL=16)
++              WRITE(IUHAM,REC=1) GRID%NGX,GRID%NGY,GRID%NGZ,NPL
++#ifdef debug
++              DO i=1,NPL
++                WRITE(IUHAM,REC=i+1) WDES%IGX(i,NK),WDES%IGY(i,NK),WDES%IGZ(i,NK),G_INDEX(i,NK)
++              ENDDO
++            
++              WRITE(IUHAM,REC=NPL+2) WDES%VKPT(1,NK),WDES%VKPT(2,NK)
++              WRITE(IUHAM,REC=NPL+3) WDES%VKPT(3,NK),0._q
++#endif
++            
++              CLOSE(IUHAM)
++#ifndef debug
++           ENDIF
++#endif
++            
++         
++              ! information needed for non local potential
++              NIS=1
++              typ:DO NT=1,NONL_S%NTYP
++                LMMAXC=NONL_S%LMMAX(NT)
++           
++                IF (LMMAXC.NE.0) THEN
++                  WRITE(NTINDEX,'(g0)') NT
++#ifdef wrtphase
++                  ! take a lot of space, write position instead.
++                  ! phase
++                  OPEN(IUHAM,FILE='PHASE_'//TRIM(NB_C)//'_'//TRIM(NKINDEX)//'_'//&
++                          TRIM(NISP)//'_'//TRIM(NTINDEX),&
++                          STATUS='REPLACE',FORM='UNFORMATTED',ACCESS='DIRECT',&
++                          RECL=16*NPL*NONL_S%NITYP(NT))
++           
++                  WRITE(IUHAM,REC=1) NONL_S%CREXP(1:NPL,&
++                          NIS:NIS+NONL_S%NITYP(NT)-1)
++           
++                  CLOSE(IUHAM)
++#endif
++                  ! projection function
++#ifndef debug
++                  IF (NK.EQ.1 .AND. ISP.EQ.1) THEN
++#endif
++                  OPEN(IUHAM,FILE='PROJ_'//TRIM(NB_C)//'_'//TRIM(NKINDEX)//'_'//&
++                          TRIM(NISP)//'_'//TRIM(NTINDEX),&
++                          STATUS='REPLACE',FORM='UNFORMATTED',ACCESS='DIRECT',&
++                          RECL=8)
++                  WRITE(IUHAM,Rec=1) PP(NT)%LMAX,LMMAXC
++                  CH0=0;CH1=0;CH2=0;CH3=0;
++                  DO i=1,PP(NT)%LMAX
++                    IF (PP(NT)%LPS(i)==0) THEN
++                      CH0=CH0+1
++                    ELSEIF (PP(NT)%LPS(i)==1) THEN
++                      CH1=CH1+1
++                    ELSEIF (PP(NT)%LPS(i)==2) THEN
++                      CH2=CH2+1
++                    ELSEIF (PP(NT)%LPS(i)==3) THEN
++                      CH3=CH3+1
++                    ELSE
++                      WRITE(*,*) 'warning:L>3 not supported now'
++                    ENDIF
++                  ENDDO
++                  WRITE(IUHAM,Rec=2) 0,CH0
++                  WRITE(IUHAM,Rec=3) 1,CH1
++                  WRITE(IUHAM,Rec=4) 2,CH2
++                  WRITE(IUHAM,Rec=5) 3,CH3
++                 
++#ifdef debug
++                  DO i=1,LMMAXC
++                    DO j=1,NPL
++                      WRITE(IUHAM,Rec=j+5+(i-1)*NPL) NONL_S%QPROJ(j,i,NT,NK,1)
++                    ENDDO
++                  ENDDO
++              
++                  ! not used
++                  IF (WDES%LSPIRAL) THEN
++                    DO i=LMMAXC+1,2*LMMAXC
++                      DO j=1,NPL
++                        WRITE(IUHAM,Rec=j+5+(i-1)*NPL) NONL_S%QPROJ(1:NPL,i,NT,NK,2)
++                      ENDDO
++                    ENDDO
++                  ENDIF
++#endif
++         
++                  CLOSE(IUHAM)
++#ifndef debug
++                  ENDIF
++#endif
++            
++         
++         
++                ENDIF
++                NIS=NIS+NONL_S%NITYP(NT)
++              ENDDO typ
++          ENDIF
++ 
++          IF (DYN%IBRION==0 .OR. DYN%IBRION==23) THEN
++              MV='mv ./INDEX_'//TRIM(NB_C)//'_'//TRIM(NKINDEX)//'_* ./PROJ_'//TRIM(NB_C)//'_'//TRIM(NKINDEX)//'_* ./CDIJ_'//TRIM(NB_C)//'_'//TRIM(NKINDEX)//'_* ./CQIJ_'//TRIM(NB_C)//'_'//TRIM(NKINDEX)//'_* ./BEAD_'//TRIM(NSTEP_C)//' 1>/dev/null 2>&1'
++              CALL system(MV)
++          ENDIF
++ 
++        ENDDO kpoint
++ 
++      ENDDO spin
++
++      IF (DYN%IBRION==0 .OR. DYN%IBRION==23) THEN
++          MV='mv ./SV_'//TRIM(NB_C)//'_* ./BEAD_'//TRIM(NSTEP_C)//' 1>/dev/null 2>&1'
++          CALL system(MV)
++      ENDIF
++     
++      CALL system_clock(t2)
++      IF (MOD(0,WDES%COMM_KINTER%NCPU) .EQ. (WDES%COMM_KINTER%NODE_ME-1)) THEN
++        WRITE(*,*) ''
++        WRITE(*,*) 'OUTPUT OVER:',(t2-t1)/t_rate,'s'
++      ENDIF
++     
++#ifdef debug
++      IF (LINDEX) THEN
++        DEALLOCATE(G_INDEX,G_INDEX_LOC)
++      ENDIF
++#endif
++
++  202 IF (MOD(0,WDES%COMM_INTER%NCPU) .EQ. (WDES%COMM_INTER%NODE_ME-1)) THEN
++          IF (MOD(0,WDES%COMM_INB%NCPU) .NE. (WDES%COMM_INB%NODE_ME-1)) THEN
++            spin2: DO ISP=1,WDES%NCDIJ
++  
++              IUHAM=540+WDES%NKPTS*ISP
++              WRITE(NISP,'(g0)') ISP
++              WRITE(INB_INDEX,'(g0)') WDES%COMM_INB%NODE_ME
++              ! information needed for local potential and kinetic energy
++              IF (MOD(0,WDES%COMM_KINTER%NCPU) .EQ. (WDES%COMM_KINTER%NODE_ME-1)) THEN
++#ifdef realmode
++                OPEN(IUHAM,FILE='./SV_'//TRIM(NB_C)//'_'//TRIM(NISP)//'_'//TRIM(INB_INDEX),&
++                        STATUS='REPLACE',FORM='UNFORMATTED',ACCESS='DIRECT',RECL=8*GRID%RL%NP)
++#else
++                OPEN(IUHAM,FILE='./SV_'//TRIM(NB_C)//'_'//TRIM(NISP)//'_'//TRIM(INB_INDEX),&
++                        STATUS='REPLACE',FORM='UNFORMATTED',ACCESS='DIRECT',RECL=16*GRID%RL%NP)
++#endif
++                WRITE(IUHAM,REC=1) SV(1:GRID%RL%NP,ISP)
++                CLOSE(IUHAM)
++
++                NIS=1;i_in1=1;i_in2=1
++                typ3: DO NT=1,NONL_S%NTYP
++                LMMAXC=NONL_S%LMMAX(NT)
++           
++                  IF (LMMAXC.NE.0) THEN
++                    WRITE(NTINDEX,'(g0)') NT
++                    ! nonlocal pseudopotential strength
++#ifdef realmode
++                    OPEN(IUHAM,FILE='./CDIJ_'//TRIM(NB_C)//'_'//&
++                            TRIM(NISP)//'_'//TRIM(NTINDEX)//'_'//TRIM(INB_INDEX),&
++                            STATUS='REPLACE',FORM='UNFORMATTED',ACCESS='DIRECT',&
++                            RECL=8*LMMAXC)
++#else
++                    OPEN(IUHAM,FILE='./CDIJ_'//TRIM(NB_C)//'_'//&
++                            TRIM(NISP)//'_'//TRIM(NTINDEX)//'_'//TRIM(INB_INDEX),&
++                            STATUS='REPLACE',FORM='UNFORMATTED',ACCESS='DIRECT',&
++                            RECL=16*LMMAXC)
++#endif
++                    ! DO i=1,NONL_S%NITYP(NT)
++                    DO i=NIS,NIS+NONL_S%NITYP(NT)-1
++                      IF (NI_LOCAL(i,WDES%COMM_INB) /=0 ) THEN
++                        DO j=1,LMMAXC
++                          WRITE(IUHAM,Rec=(i-NIS)*LMMAXC+j) CDIJ(1:LMMAXC,j,i_in1,ISP)
++                        ENDDO
++                        i_in1=i_in1+1
++                      ENDIF
++                    ENDDO
++           
++                    CLOSE(IUHAM)
++           
++                    ! overlap strength
++#ifdef realmode
++                    OPEN(IUHAM,FILE='./CQIJ_'//TRIM(NB_C)//'_'//&
++                            TRIM(NISP)//'_'//TRIM(NTINDEX)//'_'//TRIM(INB_INDEX),&
++                            STATUS='REPLACE',FORM='UNFORMATTED',ACCESS='DIRECT',&
++                            RECL=8*LMMAXC)
++#else
++                    OPEN(IUHAM,FILE='./CQIJ_'//TRIM(NB_C)//'_'//&
++                            TRIM(NISP)//'_'//TRIM(NTINDEX)//'_'//TRIM(INB_INDEX),&
++                            STATUS='REPLACE',FORM='UNFORMATTED',ACCESS='DIRECT',&
++                            RECL=16*LMMAXC)
++#endif
++                    ! DO i=1,NONL_S%NITYP(NT)
++                    DO i=NIS,NIS+NONL_S%NITYP(NT)-1
++                      IF (NI_LOCAL(i,WDES%COMM_INB) /=0 ) THEN
++                        DO j=1,LMMAXC
++                          WRITE(IUHAM,Rec=(i-NIS)*LMMAXC+j) CQIJ(1:LMMAXC,j,i_in2,ISP)
++                        ENDDO
++                        i_in2=i_in2+1
++                      ENDIF
++                    ENDDO
++           
++                    CLOSE(IUHAM)
++                    NIS=NIS+NONL_S%NITYP(NT)
++                  ENDIF
++                ENDDO typ3
++              ENDIF
++            ENDDO spin2
++
++
++          ENDIF
++
++      ENDIF
++
++      ENDIF
++      CALL NONL_DEALLOC(NONL_S)
++    POP_ACC_EXEC_ON
++    
++      IF (INFO%LCLOSE) THEN
++        STOP
++      ENDIF
++  END SUBROUTINE
++
++  SUBROUTINE GEN_G_INDEX(G_INDEX, G_INDEX_LOC, NPLWV, NPLMAX, WDES, GRID)
++    USE prec
++    USE mgrid
++    USE wave
++
++    IMPLICIT NONE
++    TYPE (wavedes) :: WDES
++    TYPE (grid_3d) :: GRID
++    INTEGER :: NPLWV, NPLMAX
++    INTEGER :: G_INDEX(NPLMAX,WDES%NKPTS)
++    INTEGER :: G_INDEX_LOC(NPLWV,WDES%NKPTS)
++
++    INTEGER :: NK, IND, NG
++
++    G_INDEX=0
++    G_INDEX_LOC=0
++    
++    kpoint:DO NK=1,WDES%NKPTS
++        ! used to allocate kpoints to different nodes
++        IF (MOD(NK-1,WDES%COMM_KINTER%NCPU) .NE. (WDES%COMM_KINTER%NODE_ME-1)) &
++                CYCLE kpoint
++
++        ! give the relationship in position between G points and grid points
++        !OPEN(UNIT=2000,FILE='G_INDEX',STATUS='UNKNOWN')
++        !REWIND 2000
++        DO IND=1, WDES%NGVECTOR(NK)
++            NG= MOD(WDES%IGX(IND,NK)+GRID%NGX,GRID%NGX)+1 +&
++                    MOD(WDES%IGY(IND,NK)+GRID%NGY,GRID%NGY)*GRID%NGX_rd + &
++                    MOD(WDES%IGZ(IND,NK)+GRID%NGZ,GRID%NGZ)*GRID%NGY*GRID%NGX_rd
++            G_INDEX(IND,NK)=NG
++            G_INDEX_LOC(NG,NK)=IND
++            !WRITE(2000,*) IND,WDES%IGX(IND,NK),WDES%IGY(IND,NK),WDES%IGZ(IND,NK),NG
++        ENDDO
++        !CLOSE(2000)
++    ENDDO kpoint
++
++  END SUBROUTINE
+Binary files ../ori6.4.1/src/.outham.F.swp and src/.outham.F.swp differ
+diff -rupN ../ori6.4.1/src/reader.F src/reader.F
+--- ../ori6.4.1/src/reader.F	2023-04-05 13:44:11.000000000 +0800
++++ src/reader.F	2024-01-26 21:06:57.830694137 +0800
+@@ -21,7 +21,11 @@
+      &        LSPIRAL,LZEROZ,QSPIRAL,LORBITALREAL, &
+      &        LASPH,TURBO,IRESTART,NREBOOT,NMIN,EREF, &
+      &        NLSPLINE,FFTW_PLAN_EFFORT, &
+-     &        LH5,LWAVEH5,LCHARGH5,VELOCITY &
++     &        LH5,LWAVEH5,LCHARGH5,VELOCITY, &
++     &        LFIXCOM, LFIX_FRAME,&
++     &        LFHAM, &
++     &        NB,LINDEX,LSTOP,NCONT,LKPOINTS,NJUMP,LNODYN &
++     &       ,IHOST,PORT,INET &
+ #ifdef libbeef
+      &       ,LBEEFENS,LBEEFBAS &
+ #endif
+@@ -68,6 +72,11 @@
+      &          LPLANE_WISE, &
+      &          LASPH,INTERACTIVE,LORBITALREAL,LVCADER, &
+      &          LCONT, LH5, LWAVEH5, LCHARGH5, VELOCITY
++!-----------------------------------------------------------------------------
++      LOGICAL   LFIXCOM, LFHAM, LINDEX, LSTOP, LKPOINTS
++      INTEGER   NB, NCONT, NJUMP
++      LOGICAL   LFIX_FRAME, LNODYN
++!-----------------------------------------------------------------------------
+       DIMENSION POMASS(NTYPD),RWIGS(NTYPP), &
+      &          ROPT(NTYPD),DARWIN_V(NTYPD),DARWIN_R(NTYPD),VCA(NTYPD)
+       DIMENSION ATOMOM(3*NIOND)
+@@ -80,6 +89,9 @@
+       LOGICAL   LGAMMA
+       LOGICAL   LKBLOWUP
+       LOGICAL   NLSPLINE
++! ipi port, socket type, host
++      INTEGER   PORT, INET
++      CHARACTER(1024) IHOST
+ !-MM- Spin spiral stuff      
+       LOGICAL   LSPIRAL,LZEROZ
+       REAL(q)   QSPIRAL(3)
+@@ -353,12 +365,15 @@
+ ! number of ionic steps, calculate stresses? (default NSW=0, ISIF=2):
+       NSW=0
+       IF (IBRION==5 .OR. IBRION==6 .OR. IBRION==7 .OR. IBRION==8) NSW=1
++      IF (IBRION==23) NSW=100000 ! default large steps for ipi driver
+       CALL PROCESS_INCAR(LOPEN, IU0, IU5, 'NSW', NSW, IERR, WRITEXMLINCAR)
+ ! IBRION is 'useless' if NSW=0, set this flag to -1 in this case ...
+       IF (NSW==0) IBRION=-1
+       ISIF=2
+       ! if MD is selected dont calculate stress
+       IF (IBRION==0) ISIF=0
++      ! ipi driver mode default calculate stress and allow cell to change
++      IF (IBRION==23) ISIF=3
+       CALL PROCESS_INCAR(LOPEN, IU0, IU5, 'ISIF', ISIF, IERR, WRITEXMLINCAR)
+ ! prediction of wavefunction:
+       IWAVPR=0
+@@ -371,6 +386,8 @@
+ #endif
+ ! relaxation: IWAVPR=1
+       IF (IBRION>0) IWAVPR=1
++      ! ipi driver mode default wavefunction extrapolation same as relaxation
++      IF (IBRION==23) IWAVPR=1
+       CALL PROCESS_INCAR(LOPEN, IU0, IU5, 'IWAVPR', IWAVPR, IERR, WRITEXMLINCAR)
+ 
+       IF (IWAVPR==10) THEN
+@@ -384,9 +401,24 @@
+ #ifdef MPI
+       IWAVPR=MOD(IWAVPR,10)+10
+ #endif
++      
++! read ipi host & port 
++      IF (IBRION==23) THEN
++        SZNAM='localhost'
++        CALL PROCESS_INCAR(LOPEN, IU0, IU5, 'IHOST', SZNAM, 1024, IERR, WRITEXMLINCAR)
++        CALL STRIP(SZNAM,N,'A')
++        IHOST=SZNAM
++
++        PORT=23330
++        CALL PROCESS_INCAR(LOPEN, IU0, IU5, 'PORT', PORT, IERR, WRITEXMLINCAR)
++
++        INET=1
++        CALL PROCESS_INCAR(LOPEN, IU0, IU5, 'INET', INET, IERR, WRITEXMLINCAR)
++      ENDIF
+ 
+ ! switch on symmetry (default ISYM=1):
+       ISYM=1 ; IF (LPAW) ISYM=2
++      IF (IBRION==23) ISYM=0 ! default no symm for ipi driver mode
+       CALL PROCESS_INCAR(LOPEN, IU0, IU5, 'ISYM', ISYM, IERR, WRITEXMLINCAR)
+ 
+ ! for reasons of safety (crazy user are present all over the world):
+@@ -855,6 +887,41 @@
+       IF (INPLIN(1:1)=='e') FFTW_PLAN_EFFORT=0
+       IF (INPLIN(1:1)=='m') FFTW_PLAN_EFFORT=1
+ 
++! --------------------------------------------------------------------
++! LFIXCOM -- COM fixing for langevin thermo
++      LFIXCOM=.FALSE.
++      CALL PROCESS_INCAR(LOPEN, IU0, IU5, 'LFIXCOM', LFIXCOM, IERR, WRITEXMLINCAR)
++
++! LFIXCOM -- COM fixing for langevin thermo
++      LFIX_FRAME=.FALSE.
++      CALL PROCESS_INCAR(LOPEN, IU0, IU5, 'LFIX_FRAME', LFIX_FRAME, IERR, WRITEXMLINCAR)
++
++! --------------------------------------------------------------------
++! LFHAM -- obtain the full Hamilton Matrix
++      LFHAM=.FALSE.
++      CALL PROCESS_INCAR(LOPEN, IU0, IU5, 'LFHAM', LFHAM, IERR, WRITEXMLINCAR)
++
++      NB=1
++      CALL PROCESS_INCAR(LOPEN, IU0, IU5, 'NB', NB, IERR, WRITEXMLINCAR)
++
++      LINDEX=.FALSE.
++      CALL PROCESS_INCAR(LOPEN, IU0, IU5, 'LINDEX', LINDEX, IERR, WRITEXMLINCAR)
++
++      LCLOSE=.FALSE.
++      CALL PROCESS_INCAR(LOPEN, IU0, IU5, 'LCLOSE', LCLOSE, IERR, WRITEXMLINCAR)
++
++      NCONT=0
++      CALL PROCESS_INCAR(LOPEN, IU0, IU5, 'NCONT', NCONT, IERR, WRITEXMLINCAR)
++
++      LKPOINTS=.FALSE.
++      CALL PROCESS_INCAR(LOPEN, IU0, IU5, 'LKPOINTS', LKPOINTS, IERR, WRITEXMLINCAR)
++
++      NJUMP=1
++      CALL PROCESS_INCAR(LOPEN, IU0, IU5, 'NJUMP', NJUMP, IERR, WRITEXMLINCAR)
++
++      LNODYN=.FALSE.
++      CALL PROCESS_INCAR(LOPEN, IU0, IU5, 'LNODYN', LNODYN, IERR, WRITEXMLINCAR)
++
+ #ifdef libbeef
+ ! read in flag LBEEFENS 
+       LBEEFENS=.FALSE.
+diff -rupN ../ori6.4.1/src/sockets.c src/sockets.c
+--- ../ori6.4.1/src/sockets.c	1970-01-01 08:00:00.000000000 +0800
++++ src/sockets.c	2024-01-26 21:06:57.818694048 +0800
+@@ -0,0 +1,155 @@
++/* A minimal wrapper for socket communication.
++
++Copyright (C) 2013, Joshua More and Michele Ceriotti
++
++Permission is hereby granted, free of charge, to any person obtaining
++a copy of this software and associated documentation files (the
++"Software"), to deal in the Software without restriction, including
++without limitation the rights to use, copy, modify, merge, publish,
++distribute, sublicense, and/or sell copies of the Software, and to
++permit persons to whom the Software is furnished to do so, subject to
++the following conditions:
++
++The above copyright notice and this permission notice shall be included
++in all copies or substantial portions of the Software.
++
++THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
++EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
++MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
++IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
++CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
++TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
++SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
++
++
++Contains both the functions that transmit data to the socket and read the data
++back out again once finished, and the function which opens the socket initially.
++Can be linked to a FORTRAN code that does not support sockets natively.
++
++Functions:
++   error: Prints an error message and then exits.
++   open_socket_: Opens a socket with the required host server, socket type and
++      port number.
++   write_buffer_: Writes a string to the socket.
++   read_buffer_: Reads data from the socket.
++*/
++
++#include <stdio.h>
++#include <stdlib.h>
++#include <unistd.h>
++#include <string.h>
++#include <sys/types.h>
++#include <sys/socket.h>
++#include <netinet/in.h>
++#include <sys/un.h>
++#include <netdb.h>
++
++void open_socket(int *psockfd, int* inet, int* port, const char* host)
++/* Opens a socket.
++
++Note that fortran passes an extra argument for the string length, but this is
++ignored here for C compatibility.
++
++Args:
++   psockfd: The id of the socket that will be created.
++   inet: An integer that determines whether the socket will be an inet or unix
++      domain socket. Gives unix if 0, inet otherwise.
++   port: The port number for the socket to be created. Low numbers are often
++      reserved for important channels, so use of numbers of 4 or more digits is
++      recommended.
++   host: The name of the host server.
++*/
++
++{
++   int sockfd, ai_err;
++
++   if (*inet>0)
++   {  // creates an internet socket
++      
++      // fetches information on the host      
++      struct addrinfo hints, *res;  
++      char service[256];
++   
++      memset(&hints, 0, sizeof(hints));
++      hints.ai_socktype = SOCK_STREAM;
++      hints.ai_family = AF_INET;
++      hints.ai_flags = AI_PASSIVE;
++
++      sprintf(service,"%d",*port); // convert the port number to a string
++      ai_err = getaddrinfo(host, service, &hints, &res); 
++      if (ai_err!=0) { perror("Error fetching host data. Wrong host name?"); exit(-1); }
++
++      // creates socket
++      sockfd = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
++      if (sockfd < 0) { perror("Error opening socket"); exit(-1); }
++    
++      // makes connection
++      if (connect(sockfd, res->ai_addr, res->ai_addrlen) < 0) 
++      { perror("Error opening INET socket: wrong port or server unreachable"); exit(-1); }
++      freeaddrinfo(res);
++   }
++   else
++   {  
++      struct sockaddr_un serv_addr;
++
++      // fills up details of the socket addres
++      memset(&serv_addr, 0, sizeof(serv_addr));
++      serv_addr.sun_family = AF_UNIX;
++      strcpy(serv_addr.sun_path, "/tmp/ipi_");
++      strcpy(serv_addr.sun_path+9, host);
++      // creates a unix socket
++  
++      // creates the socket
++      sockfd = socket(AF_UNIX, SOCK_STREAM, 0);
++
++      // connects
++      if (connect(sockfd, (struct sockaddr *) &serv_addr, sizeof(serv_addr)) < 0) 
++      { perror("Error opening UNIX socket: path unavailable, or already existing"); exit(-1); }
++   }
++
++
++   *psockfd=sockfd;
++}
++
++void writebuffer(int *psockfd, const char *data, int* plen)
++/* Writes to a socket.
++
++Args:
++   psockfd: The id of the socket that will be written to.
++   data: The data to be written to the socket.
++   plen: The length of the data in bytes.
++*/
++
++{
++   int n;
++   int sockfd=*psockfd;
++   int len=*plen;
++
++   n = write(sockfd,data,len);
++   if (n < 0) { perror("Error writing to socket: server has quit or connection broke"); exit(-1); }
++}
++
++
++void readbuffer(int *psockfd, char *data, int* plen)
++/* Reads from a socket.
++
++Args:
++   psockfd: The id of the socket that will be read from.
++   data: The storage array for data read from the socket.
++   plen: The length of the data in bytes.
++*/
++
++{
++   int n, nr;
++   int sockfd=*psockfd;
++   int len=*plen;
++
++   n = nr = read(sockfd,data,len);
++
++   while (nr>0 && n<len )
++   {  nr=read(sockfd,&data[n],len-n); n+=nr; }
++
++   if (n == 0) { perror("Error reading from socket: server has quit or connection broke"); exit(-1); }
++}
++
++
