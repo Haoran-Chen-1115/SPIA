@@ -74,13 +74,14 @@ make job
 ## Preparations before calculating superconducting properties.
 During the PIMD simulations, all outputs are placed in directories ROOT_DIR/run_$i/BEAD_$n, where $i is the bead index, and $n is the step index. You need to move the files to ROOT_DIR/BEAD_$n.
 In addition, you need to prepare two more sets of files in the following directories:
-* **ROOT_DIR/BEAD_1_sym** One-step calculation using the equilibrium ion configuration (a regular self-consistent calculation while setting LFHAM=.TRUE., LINDEX=.TRUE., NB=1). The equilibrium positions are used to anaylze the symmetry of the system.
+* **ROOT_DIR/BEAD_1** One-step calculation using the initial ion configuration (a regular self-consistent calculation while setting LFHAM=.TRUE., LINDEX=.TRUE., NB=1). The equilibrium positions are used to anaylze the symmetry of the system. It provides informations like lattice parameters, Fourier transformation grids, and so on.
+* **ROOT_DIR/BEAD_1_sym** One-step calculation using the equilibrium ion configuration (a regular self-consistent calculation while setting LFHAM=.TRUE., LINDEX=.TRUE., NB=1). The equilibrium positions are used to anaylze the symmetry of the system. In the case of a superionic system, you can use a POSCAR containing positions which possess the symmetry you assumed. For example, in Li2MgH16, you may use the solid-state position file. The file can contain different numbers of ions from your simulation.
 * **ROOT_DIR/BEAD_1_primitive** One-step calculation using the equilibrium ion configuration in the primitive cell. It is used to calculate the equilibrium Bloch waves, and used to find the relation of k-points between the primitive Brillouin zone and supercell Brillouin zone.
 
 
 ## Main program
-The main program is in the directory SPIA/main_nscf. In practice, in 
-The program basically runs from 1_GEN_CORE to 7_Collect in steps:
+The main program is in the directory SPIA/main_new. A matlab script main.m is provided, describing the running procedure.
+The program basically runs from 1_GEN_CORE to 6_Collect in steps:
 
 * **0_Public:** Contains functions that are shared by multiple steps. 
 Parameters of the calculations are the descriptions can be found in 0_Public/parameter.m.
@@ -89,37 +90,31 @@ Parameters of the calculations are the descriptions can be found in 0_Public/par
 ```
 >> GEN_CORE_s
 ```
-
-* **2_GEN_BASIS:** Calculates the Bloch waves of a provided ion configuration. If L_Bloch is set to true, the basis set will be used to expand electron Green's function of different ion configurations (See Eq. (12) of Ref. [3]).
+* **2_Dens:** The file find_position_new.m is used to find the average positions in the base cell. The base cell is the original `primitive cell' to construct (non-)diagonal supercells. For the non-diagonal supercell technique, refer to  Jonathan H. Lloyd-Williams and Bartomeu Monserrat, Phys. Rev. B 92, 184301 (2015).
 ```
->> Gen_BASIS_NDsym_nscf
+>> find_position_new
 ```
 
 * **3_EFERMI:** Calculates EFERMI_AV=\<Ef\> as an initial guess of the Fermi energy.
 ```
 >> CAC_EFERMI
-```       
-        
-* **4_Gbar:** Calculates electron Green's functions of different ion configurations, and take the average. Parallelization is excuted by Gbar_ND.m.
+```
+      
+* **4_Spec:** Calculate the eigen-energies distribution (spectral function) on the non-self-consistent k mesh. On a uniform k-mesh, the program is used to calculate the density of states and Fermi ernergy.
 ```
 >> NCL=1; % Select the cluster number
->> Gbar_ND
+>> Spec_main;
+>> CAC_EFERMI_r;
+```
+If L_path is set to true in 0_Public/parameter.m, the program can also be used to calculate the spectral function or band structure on the given k-point path.
+        
+* **5_SPIA:** The main program of SPIA. It calculates electron Green's functions of different ion configurations, and take the average. Parallelization is excuted by Gbar_ND.m. With the average Green's function, New_basis.m is used to calculates the EPC-renormalized Bloch bases using the average Green's function according to Eq. (2) of Ref. [3]. Finally, Tbar_ND.m calculates the electron-electron pair scateering amplitude according to Eqs. (1) and (5) of Ref. [3].
+```
+>> NCL=1; % Select the cluster number
+>> SPIA;
 ```      
 
-* **5_New_base:** Calculates the EPC-renormalized Bloch bases using the average Green's function according to Eq. (2) of Ref. [3].
+* **6_Collect:** Solves the Bethe-Salpeter equation to calculate the effective electron-electron interactions, and solve linearized Eliashberg equations to solve Tc. The Lorentz smearing for calculating EPC parameters range from 0.02 *eV* to 1.6 *eV* with a step 0.02 *eV* by default.
 ```
->> New_basis
-```        
-
-* **6_Tbar:** Calculates the electron-electron pair scateering amplitude according to Eqs. (1) and (5) of Ref. [3].
-```
->> NCL=1; % Select the cluster number
->> Tbar_ND
+>> Collectq_NDsc_lor_sym;
 ```   
-
-* **7_Collect:** Solves the Bethe-Salpeter equation to calculate the effective electron-electron interactions, and solve linearized Eliashberg equations to solve Tc. The gaussian smearing for calculating EPC parameters are set to 0.02 *Ry* by default.
-```
->> Collectq_NDsc_nscf
-```   
-
-* **8_Tools:** Contains tools to calculate mean squared displacements (MSD) and radial distribuction functions (RDF).
