@@ -675,8 +675,8 @@ diff -rupN ../ori5.4.4/src/.objects src/.objects
 +        outham.o
 diff -rupN ../ori5.4.4/src/outham.F src/outham.F
 --- ../ori5.4.4/src/outham.F	1970-01-01 08:00:00.000000000 +0800
-+++ src/outham.F	2024-01-26 10:38:10.065364047 +0800
-@@ -0,0 +1,692 @@
++++ src/outham.F	2024-01-29 15:04:39.492566494 +0800
+@@ -0,0 +1,701 @@
 +#include "symbol.inc"
 +
 +  SUBROUTINE OUT_HAM(GRID, NONL_S_ORI, PP, WDES, LATT_CUR, T_INFO, INFO, SV, &
@@ -848,6 +848,12 @@ diff -rupN ../ori5.4.4/src/outham.F src/outham.F
 +          IF (DYN%IBRION==0 .OR. DYN%IBRION==23) THEN
 +              MV='mv ./HEAD_'//TRIM(NB_C)//' ./BEAD_'//TRIM(NSTEP_C)//' 1>/dev/null 2>&1'
 +              CALL system(MV)
++
++              MV='mv ./ELECT_'//TRIM(NB_C)//' ./BEAD_'//TRIM(NSTEP_C)//' 1>/dev/null 2>&1'
++              CALL system(MV)
++
++              MV='mv ./VKPT ./BEAD_'//TRIM(NSTEP_C)//' 1>/dev/null 2>&1'
++              CALL system(MV)
 +          ENDIF
 +      ENDIF
 + 
@@ -963,6 +969,9 @@ diff -rupN ../ori5.4.4/src/outham.F src/outham.F
 + 
 +          IF (DYN%IBRION==0 .OR. DYN%IBRION==23) THEN
 +              MV='mv ./POS_'//TRIM(NB_C)//'_* ./SIMPI_'//TRIM(NB_C)//'_* ./PWAV_'//TRIM(NB_C)//'_* ./WAE_'//TRIM(NB_C)//'_* ./WPS_'//TRIM(NB_C)//'_* ./BEAD_'//TRIM(NSTEP_C)//' 1>/dev/null 2>&1'
++              CALL system(MV)
++
++              MV='mv ./LM_INDEX_'//TRIM(NB_C)//'_* PSPNL_'//TRIM(NB_C)//'_* ./BEAD_'//TRIM(NSTEP_C)//' 1>/dev/null 2>&1'
 +              CALL system(MV)
 +          ENDIF
 +      ENDIF
