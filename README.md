@@ -106,7 +106,7 @@ Parameters of the calculations are the descriptions can be found in 0_Public/par
 >> Spec_main;
 >> CAC_EFERMI_r;
 ```
-If L_path is set to true in 0_Public/parameter.m, the program can also be used to calculate the spectral function or band structure on the given k-point path.
+  If L_path is set to true in 0_Public/parameter.m, the program can also be used to calculate the spectral function or band structure on the given k-point path.
         
 * **5_SPIA:** The main program of SPIA. It calculates electron Green's functions of different ion configurations, and take the average. Parallelization is excuted by Gbar_ND.m. With the average Green's function, New_basis.m is used to calculates the EPC-renormalized Bloch bases using the average Green's function according to Eq. (2) of Ref. [3]. Finally, Tbar_ND.m calculates the electron-electron pair scateering amplitude according to Eqs. (1) and (5) of Ref. [3].
 ```
