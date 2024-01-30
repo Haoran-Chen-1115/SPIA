@@ -70,10 +70,11 @@ and run the following command:
 ```
 make job
 ```
+Note that the line **echo "NB=$$i" >> INCAR; \ ** is important when defining run_vasp!
 
 ## Preparations before calculating superconducting properties.
 During the PIMD simulations, all outputs are placed in directories ROOT_DIR/run_$i/BEAD_$n, where $i is the bead index, and $n is the step index. You need to move the files to ROOT_DIR/BEAD_$n.
-In addition, you need to prepare two more sets of files in the following directories:
+In addition, you need to prepare three more sets of files in the following directories:
 * **ROOT_DIR/BEAD_1** One-step calculation using the initial ion configuration (a regular self-consistent calculation while setting LFHAM=.TRUE., LINDEX=.TRUE., NB=1). The equilibrium positions are used to anaylze the symmetry of the system. It provides informations like lattice parameters, Fourier transformation grids, and so on.
 * **ROOT_DIR/BEAD_1_sym** One-step calculation using the equilibrium ion configuration (a regular self-consistent calculation while setting LFHAM=.TRUE., LINDEX=.TRUE., NB=1). The equilibrium positions are used to anaylze the symmetry of the system. In the case of a superionic system, you can use a POSCAR containing positions which possess the symmetry you assumed. For example, in Li2MgH16, you may use the solid-state position file. The file can contain different numbers of ions from your simulation.
 * **ROOT_DIR/BEAD_1_primitive** One-step calculation using the equilibrium ion configuration in the primitive cell. It is used to calculate the equilibrium Bloch waves, and used to find the relation of k-points between the primitive Brillouin zone and supercell Brillouin zone.
