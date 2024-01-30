@@ -70,7 +70,7 @@ and run the following command:
 ```
 make job
 ```
-Note that the line **echo "NB=$$i" >> INCAR; \ ** is important when defining run_vasp!
+Note that the line **echo** **"NB=$$i"** **>>** **INCAR;** \ is important when defining run_vasp!
 
 ## Preparations before calculating superconducting properties.
 During the PIMD simulations, all outputs are placed in directories ROOT_DIR/run_$i/BEAD_$n, where $i is the bead index, and $n is the step index. You need to move the files to ROOT_DIR/BEAD_$n.
