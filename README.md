@@ -1,5 +1,5 @@
 # Stochastic path-integral approach (SPIA)
-Stochastic path-integral approach for determing superconducting transition temperature Tc of anharmonic systems.
+Stochastic path-integral approach for determing superconducting transition temperature Tc of general systems, including liquids, anharmonic solids and superionic systems.
 The main theory can be found in the following references:
 
 &emsp;**[1] Theory in liquids:** Huiying Liu, Ying Yuan, Donghao Liu, Xin-Zheng Li, and Junren Shi. Phys. Rev. Research 2, 013340 (2020). 
