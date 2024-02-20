@@ -284,23 +284,33 @@ for NT=1:NTYP
 end
 
 %
+FID=fopen([ROOT_DIR,'/BEAD_1_sym/HEAD_1']);
+fread(FID,[3,3],'double');
+fread(FID,1,'double');
+fread(FID,1,'double');
+fread(FID,1,'int');fread(FID,1,'int');
+fread(FID,1,'int');NITYP_EQ=zeros(1,NTYP);
+for NT=1:NTYP
+    NITYP_EQ(NT)=fread(FID,1,'int');
+end
+fclose(FID);
 POSION_EQ=cell(1,NTYP);
 for NT=1:NTYP
     POSS=fopen(['../../BEAD_1_sym/POS_1_',int2str(NT)]);
-    POSION_EQ{NT}=fread(POSS,[3,NITYP(NT)],'double');
+    POSION_EQ{NT}=fread(POSS,[3,NITYP_EQ(NT)],'double');
     fclose(POSS);
     
     POSION_EQ{NT} = A*POSION_EQ{NT};
 end
 
-
+SYM_tol=2E-2;
 POS_EQ_pri=cell(1,NTYP);
 for NT=1:NTYP
     POSION_EQ_cry = A\POSION_EQ{NT};
     POSION_EQ_pri = N_sc'*POSION_EQ_cry;
     POSION_EQ_pri = mod(POSION_EQ_pri,1);
-    POSION_EQ_pri(POSION_EQ_pri<eps)=...
-        POSION_EQ_pri(POSION_EQ_pri<eps)+1;
+    POSION_EQ_pri(POSION_EQ_pri<SYM_tol)=...
+        POSION_EQ_pri(POSION_EQ_pri<SYM_tol)+1;
     POS_EQ_pri{NT}=uniquetol(POSION_EQ_pri',5E-2,'ByRows',true)';
 end
 
