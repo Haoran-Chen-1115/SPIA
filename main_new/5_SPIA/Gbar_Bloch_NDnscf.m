@@ -216,6 +216,13 @@ end
 k_weight=VKPT_sym(:,4)';
 VKPT_sym=VKPT_sym(:,1:3)';
 
+if L_Liquid
+    for NT=1:NTYP
+	NITYP_EQ(NT)=0;
+        POSION_EQ{NT}=[];
+    end
+end
+
 %[~,idx]=ismembertol(VKPT_nosym',VKPT_sym','ByRows',true);
 %idx=find(~idx);
 %VKPT_cal=VKPT_nosym(:,idx);
@@ -272,15 +279,17 @@ for ISP=1:ISPIN
     
     %% Generate the Transformation matrix for equilibrium configuration
     TRANS_EQ=eye(NPL,'single','gpuArray');
-    for NT=1:NTYP
-        POSION1=gpuArray(POSION_EQ{NT});
-        CREXP=single(exp(CITPI*G_INDEX(1:3,1:NPL).'*POSION1));
-        CREXP=conj(CREXP)*CREXP.';
-        % For \hat{T}_c=|\tilde{p}_i^a><\tilde{\phi}_i^a|...
-        TRANS_EQ=TRANS_EQ+CREXP.*TRANS_CORE{NT};
+    if ~L_Liquid
+        for NT=1:NTYP
+            POSION1=gpuArray(POSION_EQ{NT});
+            CREXP=single(exp(CITPI*G_INDEX(1:3,1:NPL).'*POSION1));
+            CREXP=conj(CREXP)*CREXP.';
+            % For \hat{T}_c=|\tilde{p}_i^a><\tilde{\phi}_i^a|...
+            TRANS_EQ=TRANS_EQ+CREXP.*TRANS_CORE{NT};
+        end
+        TRANS_EQ=gather(TRANS_EQ);
+        clear CREXP
     end
-    TRANS_EQ=gather(TRANS_EQ);
-    clear CREXP
     
     %%
     GREEN = zeros(NBANDS,NBANDS,'single','gpuArray');
