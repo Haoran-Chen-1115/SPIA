@@ -77,7 +77,9 @@ During the PIMD simulations, all outputs are placed in directories ROOT_DIR/run_
 In addition, you need to prepare three more sets of files in the following directories:
 * **ROOT_DIR/BEAD_1** One-step calculation using the initial ion configuration (a regular self-consistent calculation while setting LFHAM=.TRUE., LINDEX=.TRUE., NB=1). The equilibrium positions are used to anaylze the symmetry of the system. It provides informations like lattice parameters, Fourier transformation grids, and so on.
 * **ROOT_DIR/BEAD_1_sym** One-step calculation using the equilibrium ion configuration (a regular self-consistent calculation while setting LFHAM=.TRUE., LINDEX=.TRUE., NB=1). The equilibrium positions are used to anaylze the symmetry of the system. In the case of a superionic system, you can use a POSCAR containing positions which possess the symmetry you assumed. For example, in Li2MgH16, you may use the solid-state position file. The file can contain different numbers of ions from your simulation.
-* **ROOT_DIR/BEAD_1_primitive** One-step calculation using the equilibrium ion configuration in the primitive cell. It is used to calculate the equilibrium Bloch waves, and used to find the relation of k-points between the primitive Brillouin zone and supercell Brillouin zone.
+* **ROOT_DIR/BEAD_1_primitive** One-step calculation using the equilibrium ion configuration in the primitive cell. It is used to calculate the equilibrium Bloch waves, and used to find the relation of k-points between the primitive Brillouin zone and supercell Brillouin zone.+
+
+For liquids, simply copy **BEAD_1** to **BEAD_1_sym** and **BEAD_1_primitive**.
 
 
 ## Main program
