@@ -195,8 +195,9 @@ for NK=NK_BEGIN:NK_END
       RD_INDEX(ROOT_DIR,NC_c,'1',VKPT_nosym(:,NK_sym),B,ENCUT);
 
   if L_Liquid
+      load(['../Gbar_inv_',int2str(NK),'.mat']);
       EE = real(EFERMI_Av-Gbar_inv);
-      [EE,E_idx] = sort(EE,'ascend')
+      [EE,E_idx] = sort(EE,'ascend');
       Gbar_inv = Gbar_inv(E_idx);
       Gbar_diag = Gbar_diag(E_idx);
       save(['../Gbar_inv_new_',int2str(NK),'.mat'],'Gbar_inv','Gbar_diag');
