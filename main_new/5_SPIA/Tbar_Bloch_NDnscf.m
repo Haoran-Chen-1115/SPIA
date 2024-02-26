@@ -282,7 +282,7 @@ else
     load(['../Gbar_inv_',int2str(NK),'.mat']);
     
     EE = real(EFERMI_Av-Gbar_inv);
-    [EE,E_idx] = sort(EE,'ascend')
+    [EE,E_idx] = sort(EE,'ascend');
     Gbar_inv = Gbar_inv(E_idx);
     Gbar_diag = Gbar_diag(E_idx);
 end
@@ -425,7 +425,7 @@ for ISP=1:ISPIN
                     FHAM=diag(Gbar_inv)*FHAM*diag(Gbar_inv)...
                         -diag(Gbar_inv);
 	        else
-                    FHAM=diag(Gbar_inv)*FHAM(E_idx,E_idx)*diag(Gbar_inv)...
+                    FHAM=diag(Gbar_inv)*FHAM(E_idx(1:NBANDS),E_idx(1:NBANDS))*diag(Gbar_inv)...
                         -diag(Gbar_inv);
 	        end
                 Tbar_F(:,:,NB)=gather(FHAM(1:NBANDS,1:NBANDS));
