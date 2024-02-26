@@ -279,7 +279,12 @@ if ~L_Liquid
 else
     LBloch=false;
     BASIS_k=eye([NPL,NBANDS],'single','gpuArray');
-    load(['Gbar_inv_',int2str(NK),'.mat']);
+    load(['../Gbar_inv_',int2str(NK),'.mat']);
+    
+    EE = real(EFERMI_Av-Gbar_inv);
+    [EE,E_idx] = sort(EE,'ascend')
+    Gbar_inv = Gbar_inv(E_idx);
+    Gbar_diag = Gbar_diag(E_idx);
 end
 Gbar_inv=gpuArray(Gbar_inv(1:NBANDS));
 
@@ -416,8 +421,13 @@ for ISP=1:ISPIN
             if ~L_IBZ && L_SYM
                 FHAM_t(:,:,NB)=gather(FHAM);
             else
-                FHAM=diag(Gbar_inv)*FHAM*diag(Gbar_inv)...
-                    -diag(Gbar_inv);
+		if ~L_Liquid
+                    FHAM=diag(Gbar_inv)*FHAM*diag(Gbar_inv)...
+                        -diag(Gbar_inv);
+	        else
+                    FHAM=diag(Gbar_inv)*FHAM(E_idx,E_idx)*diag(Gbar_inv)...
+                        -diag(Gbar_inv);
+	        end
                 Tbar_F(:,:,NB)=gather(FHAM(1:NBANDS,1:NBANDS));
             end
             %clear E_BAND_now 
