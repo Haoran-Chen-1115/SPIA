@@ -1,5 +1,5 @@
 function [VKPTS_f,NKPTS_f]=Full_K(N_KP,IFLAG)
-NKPTS_f = N_KP(1)*N_KP(1)*N_KP(1);
+NKPTS_f = N_KP(1)*N_KP(2)*N_KP(3);
 
 K1 = (0:N_KP(1)-1)/N_KP(1);
 K2 = (0:N_KP(2)-1)/N_KP(2);
