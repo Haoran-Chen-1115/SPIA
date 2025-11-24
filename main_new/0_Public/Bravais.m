@@ -33,54 +33,75 @@ for i = 1:3
     b(i) = norm(B(i,:));
 end
 
-cos12 = A(:,1)'*A(:,2)/2/a(1)/a(2);
-cos23 = A(:,2)'*A(:,3)/2/a(2)/a(3);
-cos13 = A(:,3)'*A(:,1)/2/a(3)/a(1);
+cos12 = A(:,1)'*A(:,2)/a(1)/a(2);
+cos23 = A(:,2)'*A(:,3)/a(2)/a(3);
+cos13 = A(:,3)'*A(:,1)/a(3)/a(1);
+cos12_23 = (A(:,1)+A(:,2))'*(A(:,2)+A(:,3));
+cos13_23 = (A(:,1)+A(:,3))'*(A(:,2)+A(:,3));
+cos12_13 = (A(:,1)+A(:,2))'*(A(:,1)+A(:,3));
+
+a1p2 = norm(A(:,1)+A(:,2));
+a1p3 = norm(A(:,1)+A(:,3));
+a2p3 = norm(A(:,2)+A(:,3));
+a1m2 = norm(A(:,1)-A(:,2));
+a1m3 = norm(A(:,1)-A(:,3));
+a2m3 = norm(A(:,2)-A(:,3));
 
 eps = 1E-5;
-if ( abs(a(1)-a(2))<eps && abs(a(1)-a(3))<eps )
-    % Six cases
-    if ( abs(cos12-cos13)<eps && abs(cos12-cos23)<eps ) % α=β=γ
+IBRAV=0;
+if abs(cos12-cos23)<eps && abs(cos12-cos13)<eps
+    if abs(a(1)-a(2))<eps && abs(a(1)-a(3))<eps
         if abs(cos12)<eps
-            IBRAV = 12; % Primitive cubic
-        elseif abs(cos12+1/6)<eps
+            IBRAV=12; % Primitive cubic
+        elseif abs(cos12+1/3)<eps
             IBRAV = 13; % Body-centered cubic
-        elseif abs(cos12-1/4)<eps
+        elseif abs(cos12-1/2)<eps
             IBRAV = 14; % Face-centered cubic
         else
             IBRAV = 10; % Rhobohedral
         end
-    elseif abs(cos13-cos23)<eps && cos13<0 % The default specific axis is a3
-        IBRAV = 9; % Body-centered tetragonal
-    else
-        IBRAV = 6; % Body-centered orthorhombic
+    elseif abs(cos12)<eps
+        if abs(a(1)-a(2))<eps
+            IBRAV=8; % Primitive tetragonal
+        elseif a(3)-a(2)>eps && a(2)-a(1)>eps % require a(3)>a(2)>a(1)
+            IBRAV = 4; % Primitive orthorhombic
+        end
     end
-    
-elseif abs(a(1)-a(2))<eps % a=b, the default specific axis is a3
-    
-    if ( abs(cos23)<eps && abs(cos13)<eps )
-        if  abs(cos12)<eps
-            IBRAV = 8; % Primitive tetragonal
-        elseif abs(cos12+1/2)<eps
-            IBRAV = 11; % Hexagoanl
-        else
-            IBRAV = 5; % Base-centered orthorhombic
+elseif abs(cos13-cos23)<eps 
+    if abs(cos13)<eps
+        if abs(a(1)-a(2))<eps
+            % The default specific axis is a3
+            if abs(cos12+1/2)<eps
+                IBRAV = 11; % Hexagoanl
+            elseif cos12<-eps % Require cos12<0
+                IBRAV = 5; % Base-centered orthorhombic
+            end
+        elseif cos12<-eps && a(1)-a(2)>eps % Require cos12<0 and a(1)>a(2)
+            % The default specific axis is a2
+            IBRAV = 2; % Primitive monoclinic
         end
     else
-        IBRAV = 3; % Base-centered monoclinic
+        if abs(a(1)-a(2))<eps && abs(a(1)-a(3))<eps...
+                && abs(cos12_23)<eps && abs(cos12_13)<eps && abs(cos13_23)<eps...
+                && abs(a1p3-a2p3)<eps
+            % The default specific axis is a3
+            IBRAV = 9; % Body-centered tetragonal
+        elseif abs(a(1)-a(2))<eps && cos13<-eps && cos23<-eps
+            IBRAV = 3; % Base-centered monoclinic
+        end
     end
-
-elseif ( abs(cos12)<eps && abs(cos13)<eps && abs(cos23)<eps )
-    IBRAV = 4; % Primitive orthorhombic
-       
-elseif ( abs(cos12)<eps && abs(cos23)<eps ) % The default specific axis is a2
-    IBRAV = 2; % Primitive monoclinic
-
-elseif ( abs(b(1)-b(2))<eps && abs(b(1)-b(3))<eps )
-    IBRAV = 7; % Face-centered orthorhombic
-    
-else % All other cases
-    IBRAV = 1; % Triclinic
+else
+    if abs(a(1)-a(2))<eps && abs(a(1)-a(3))<eps...
+            && abs(cos12_23)<eps && abs(cos12_13)<eps && abs(cos13_23)<eps...
+            && a1p2-a1p3>eps && a1p3-a2p3>eps
+        IBRAV = 6; % Body-centered orthorhombic
+    elseif abs(a(1)-a2m3)<eps && abs(a(2)-a1m3)<eps && abs(a(3)-a1m2)<eps ...
+            && norm(A(:,1)+A(:,2)-A(:,3))-norm(A(:,1)+A(:,3)-A(:,2)) > eps ...
+            && norm(A(:,1)+A(:,3)-A(:,2))-norm(A(:,2)+A(:,3)-A(:,1)) > eps
+        IBRAV = 7; % Face-centered orthorhombic
+    elseif cos12>cos13 && cos13>cos23 && cos23>eps
+        IBRAV = 1; % Triclinic
+    end
 end
 
 end
